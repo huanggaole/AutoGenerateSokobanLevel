@@ -17,4 +17,6 @@ public:
 	std::list <StateNode*> unexploidlist;
 	std::list <StateNode*> steplist;
 	Map map;
+	// 总的迭代次数
+	int iterNum;
 };

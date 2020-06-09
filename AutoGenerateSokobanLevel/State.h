@@ -25,4 +25,10 @@ public:
 	State * clone();
 	// 判断一个state是否与自己的tiles相等
 	bool isEqual(State * tempst);
+	// 利用泛洪算法，标出棋盘上所有角色能够达到的地点。
+	void charFloodFill();
+	// 判断一个格子人是否能通过，如果能，则将相应的位置用Character进行填充
+	bool stepOn(TileType* tt, int i, int j);
+	// 判断一个箱子能否沿着特定方向被推动，如果能，则返回推动后的状态。
+	State* boxPushed(int i, int j, Direction d);
 };

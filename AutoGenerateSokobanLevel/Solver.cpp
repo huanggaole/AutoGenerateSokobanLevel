@@ -45,9 +45,10 @@ bool Solver::ifContain(State * state) {
 
 // 自动求解
 int Solver::run() {
+	iterNum = 0;
 	while (true) {
-		
-		std::wcout << unexploidlist.size()<<"\n";
+		iterNum++;
+		// std::wcout << unexploidlist.size()<<"\n";
 		
 		if (unexploidlist.size() == 0) {
 			return -1;
@@ -56,7 +57,7 @@ int Solver::run() {
 		unexploidlist.pop_front();
 		State * oristate = orisn->currentstate;
 		
-		map.drawMap(oristate);
+		// map.drawMap(oristate);
 		
 		if (oristate->ifWin()) {
 			StateNode * tempsn = orisn;
@@ -66,6 +67,35 @@ int Solver::run() {
 			}
 			return 1;
 		}
+		
+		State * tempstate = oristate->clone();
+		tempstate->charFloodFill();
+		// 遍历棋盘上的每一个Box
+		Direction alldirection[4] = {D_UP, D_DOWN, D_LEFT,  D_RIGHT};
+		for (int i = 0; i < oristate->height; i++) {
+			for (int j = 0; j < oristate->width; j++) {
+				if (tempstate->tiles[i * oristate->width + j] == Box || tempstate->tiles[i * oristate->width + j] == BoxinAid) {
+					for (int k = 0; k < 4; k++) {
+						State * newstate = tempstate->boxPushed(i, j, alldirection[k]);
+						if (newstate != nullptr) {
+							if (ifContain(newstate)) {
+								delete newstate;
+							}
+							else {
+								// map.drawMap(newstate);
+								StateNode * sn = addState(newstate);
+								sn->parentstate = orisn;
+								unexploidlist.push_back(sn);
+							}
+						}
+					}
+				}
+			}
+		}
+		delete tempstate;
+
+
+		/*
 		State * upstate = oristate->clone();
 		State * downstate = oristate->clone();
 		State * leftstate = oristate->clone();
@@ -79,7 +109,6 @@ int Solver::run() {
 		}
 		else {
 			StateNode * upsn = addState(upstate);
-			orisn->upstate = upsn;
 			upsn->parentstate = orisn;
 			unexploidlist.push_back(upsn);
 		}
@@ -88,7 +117,6 @@ int Solver::run() {
 		}
 		else {
 			StateNode * downsn = addState(downstate);
-			orisn->downstate = downsn;
 			downsn->parentstate = orisn;
 			unexploidlist.push_back(downsn);
 		}
@@ -97,7 +125,6 @@ int Solver::run() {
 		}
 		else {
 			StateNode * leftsn = addState(leftstate);
-			orisn->leftstate = leftsn;
 			leftsn->parentstate = orisn;
 			unexploidlist.push_back(leftsn);
 		}
@@ -106,10 +133,10 @@ int Solver::run() {
 		}
 		else {
 			StateNode * rightsn = addState(rightstate);
-			orisn->rightstate = rightsn;
 			rightsn->parentstate = orisn;
 			unexploidlist.push_back(rightsn);
 		}
+		*/
 	}
 }
 

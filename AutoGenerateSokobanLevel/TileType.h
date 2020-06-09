@@ -8,3 +8,10 @@ enum TileType {
 	Wall,
 	Floor
 };
+
+enum Direction {
+	D_UP,
+	D_DOWN,
+	D_LEFT,
+	D_RIGHT
+};
