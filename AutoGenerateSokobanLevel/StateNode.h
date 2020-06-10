@@ -8,4 +8,5 @@ public:
 	void deleteNode();
 	bool ifContain(State * state);
 	StateNode * addState(State * state);
+	int depth;
 };

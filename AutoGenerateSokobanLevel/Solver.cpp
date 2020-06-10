@@ -5,41 +5,60 @@ Solver::Solver(State* state)
 {
 	width = state->width;
 	height = state->height;
-	statenodes = new StateNode**[height];
+	statenodes = new StateNode*[height * width];
+	statenodesamount = new int[height * width];
 	State * newstate = state->clone();
 	for (int i = 0; i < height; i++) {
-		statenodes[i] = new StateNode*[width];
 		for (int j = 0; j < width; j++) {
-			statenodes[i][j] = new StateNode();
-			if (state->cy == i && state->cx == j) {
-				statenodes[i][j]->currentstate = newstate;
-				unexploidlist.push_back(statenodes[i][j]);
-			}
+			statenodes[i * width + j] = new StateNode();
+			statenodesamount[i * width + j] = 0;
 		}
 	}
+	newstate->charFloodFill();
+	unexploidlist.push_back(addState(newstate));
 }
 Solver::~Solver() {
 	for (int i = 0; i < height; i++) {
 		for (int j = 0; j < width; j++) {
-			statenodes[i][j]->deleteNode();
-			delete statenodes[i][j];
+			statenodes[i * width + j]->deleteNode();
+			delete statenodes[i * width + j];
 		}
-		delete statenodes[i];
 	}
 	delete statenodes;
+	delete statenodesamount;
 }
 
 StateNode * Solver::addState(State * state) {
-		return statenodes[state->cy][state->cx]->addState(state);
-}
-bool Solver::ifContain(State * state) {
+	int code = 0;
+	// 将箱子视为1，非箱子视为0
 	for (int i = 0; i < height; i++) {
 		for (int j = 0; j < width; j++) {
-			if (statenodes[i][j]->ifContain(state)) {
-				return true;
+			if (state->tiles[i * width + j] == Box || state->tiles[i * width + j] == BoxinAid) {
+				code += i * width + j;
 			}
 		}
 	}
+	code = code % (height * width);
+	statenodesamount[code]++;
+	// std::wcout << code << "\n";
+	return statenodes[code]->addState(state);
+}
+bool Solver::ifContain(State * state) {
+	int code = 0;
+	// 将箱子视为1，非箱子视为0
+	for (int i = 0; i < height; i++) {
+		for (int j = 0; j < width; j++) {
+			if (state->tiles[i * width + j] == Box || state->tiles[i * width + j] == BoxinAid) {
+				code += i * width + j;
+			}
+		}
+	}
+	code = code % (height * width);
+	// std::wcout << code << "\n";
+	if (statenodes[code]->ifContain(state)) {
+		return true;
+	}
+
 	return false;
 }
 
@@ -48,28 +67,19 @@ int Solver::run() {
 	iterNum = 0;
 	while (true) {
 		iterNum++;
-		// std::wcout << unexploidlist.size()<<"\n";
 		
 		if (unexploidlist.size() == 0) {
 			return -1;
 		}
 		StateNode * orisn = unexploidlist.front();
+		int depth = orisn->depth;
+
 		unexploidlist.pop_front();
 		State * oristate = orisn->currentstate;
 		
 		// map.drawMap(oristate);
 		
-		if (oristate->ifWin()) {
-			StateNode * tempsn = orisn;
-			while (tempsn != nullptr) {
-				steplist.push_front(tempsn);
-				tempsn = tempsn->parentstate;
-			}
-			return 1;
-		}
-		
 		State * tempstate = oristate->clone();
-		tempstate->charFloodFill();
 		// 遍历棋盘上的每一个Box
 		Direction alldirection[4] = {D_UP, D_DOWN, D_LEFT,  D_RIGHT};
 		for (int i = 0; i < oristate->height; i++) {
@@ -78,14 +88,39 @@ int Solver::run() {
 					for (int k = 0; k < 4; k++) {
 						State * newstate = tempstate->boxPushed(i, j, alldirection[k]);
 						if (newstate != nullptr) {
-							if (ifContain(newstate)) {
+							newstate->charFloodFill();
+							if (newstate->ifDead()) {
+								delete newstate;
+							}
+							else if (ifContain(newstate)) {
 								delete newstate;
 							}
 							else {
 								// map.drawMap(newstate);
+
+								/*
+								if (unexploidlist.size() % 10000 == 0) {
+									std::wcout << unexploidlist.size() << "  " << depth << "\n";
+									for (int am = 0; am < height * width; am++) {
+										std::wcout << statenodesamount[am] << "  ";
+									}
+									std::wcout << "\n";
+								}
+								*/
+
 								StateNode * sn = addState(newstate);
+								sn->depth = depth + 1;
 								sn->parentstate = orisn;
 								unexploidlist.push_back(sn);
+
+								if (newstate->ifWin()) {
+									StateNode * tempsn = sn;
+									while (tempsn != nullptr) {
+										steplist.push_front(tempsn);
+										tempsn = tempsn->parentstate;
+									}
+									return 1;
+								}
 							}
 						}
 					}
@@ -93,50 +128,6 @@ int Solver::run() {
 			}
 		}
 		delete tempstate;
-
-
-		/*
-		State * upstate = oristate->clone();
-		State * downstate = oristate->clone();
-		State * leftstate = oristate->clone();
-		State * rightstate = oristate->clone();
-		upstate->up();
-		downstate->down();
-		leftstate->left();
-		rightstate->right();
-		if (ifContain(upstate)) {
-			delete upstate;
-		}
-		else {
-			StateNode * upsn = addState(upstate);
-			upsn->parentstate = orisn;
-			unexploidlist.push_back(upsn);
-		}
-		if (ifContain(downstate)) {
-			delete downstate;
-		}
-		else {
-			StateNode * downsn = addState(downstate);
-			downsn->parentstate = orisn;
-			unexploidlist.push_back(downsn);
-		}
-		if (ifContain(leftstate)) {
-			delete leftstate;
-		}
-		else {
-			StateNode * leftsn = addState(leftstate);
-			leftsn->parentstate = orisn;
-			unexploidlist.push_back(leftsn);
-		}
-		if (ifContain(rightstate)) {
-			delete rightstate;
-		}
-		else {
-			StateNode * rightsn = addState(rightstate);
-			rightsn->parentstate = orisn;
-			unexploidlist.push_back(rightsn);
-		}
-		*/
 	}
 }
 

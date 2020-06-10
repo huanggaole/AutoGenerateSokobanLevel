@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "State.h"
+#include <iostream>
 
 State::State(int w, int h)
 {
@@ -127,6 +128,7 @@ bool State::isEqual(State * tempst) {
 			}
 		}
 	}
+	// std::wcout << "true\n";
 	return true;
 }
 // 判断一个格子人是否能通过
@@ -228,4 +230,97 @@ State* State::boxPushed(int i, int j, Direction d) {
 	res->cx = j;
 	res->cy = i;
 	return res;
+}
+
+// 剪枝：判断是否死锁
+bool State::ifDead() {
+	bool res = false;
+	res = res || ifWallCorner();
+	res = res || ifTwoxTwo();
+	return res;
+}
+// 墙角的死锁
+bool State::ifWallCorner() {
+	// 第一步，将不可能被进一步推动的BoxinAid置为Wall
+	bool ifchange = true;
+	while (ifchange) {
+		ifchange = false;
+		for (int i = 1; i < height - 1; i++) {
+			for (int j = 1; j < width - 1; j++) {
+				if (tiles[i * width + j] == BoxinAid){
+					// 左上
+					if (tiles[i * width + j - 1] == Wall && tiles[(i - 1) * width + j] == Wall) {
+						tiles[i * width + j] = Wall;
+						ifchange = true;
+					}
+					// 上右
+					if (tiles[i * width + j + 1] == Wall && tiles[(i - 1) * width + j] == Wall) {
+						tiles[i * width + j] = Wall;
+						ifchange = true;
+					}
+					// 右下
+					if (tiles[i * width + j + 1] == Wall && tiles[(i + 1) * width + j] == Wall) {
+						tiles[i * width + j] = Wall;
+						ifchange = true;
+					}
+					// 下左
+					if (tiles[i * width + j - 1] == Wall && tiles[(i + 1) * width + j] == Wall) {
+						tiles[i * width + j] = Wall;
+						ifchange = true;
+					}
+				}
+			}
+		}
+	}
+	// 第二步，如果存在不能被进一步被推动的Box，则返回true;
+	for (int i = 1; i < height - 1; i++) {
+		for (int j = 1; j < width - 1; j++) {
+			if (tiles[i * width + j] == Box) {
+				// 左上
+				if (tiles[i * width + j - 1] == Wall && tiles[(i - 1) * width + j] == Wall) {
+					return true;
+				}
+				// 上右
+				if (tiles[i * width + j + 1] == Wall && tiles[(i - 1) * width + j] == Wall) {
+					return true;
+				}
+				// 右下
+				if (tiles[i * width + j + 1] == Wall && tiles[(i + 1) * width + j] == Wall) {
+					return true;
+				}
+				// 下左
+				if (tiles[i * width + j - 1] == Wall && tiles[(i + 1) * width + j] == Wall) {
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+// 是否存在四个箱子/墙壁形成一个田字的情况
+bool State::ifTwoxTwo() {
+	for (int i = 0; i < height - 1; i++) {
+		for (int j = 0; j < width - 1; j++) {
+			int Boxnum = 0;
+			int Wallnum = 0;
+			int BoxinAidnum = 0;
+			for (int ii = 0; ii < 2; ii++) {
+				for (int jj = 0; jj < 2; jj++) {
+					if (tiles[(i + ii) * width + j + jj] == Box) {
+						Boxnum++;
+					}
+					if (tiles[(i + ii) * width + j + jj] == Wall) {
+						Wallnum++;
+					}
+					if (tiles[(i + ii) * width + j + jj] == BoxinAid) {
+						BoxinAidnum++;
+					}
+				}
+			}
+			if ((Boxnum + Wallnum + BoxinAidnum == 4) && Boxnum > 0) {
+				return true;
+			}
+		}
+	}
+	return false;
 }

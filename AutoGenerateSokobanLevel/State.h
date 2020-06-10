@@ -31,4 +31,10 @@ public:
 	bool stepOn(TileType* tt, int i, int j);
 	// 判断一个箱子能否沿着特定方向被推动，如果能，则返回推动后的状态。
 	State* boxPushed(int i, int j, Direction d);
+	// 剪枝：判断是否死锁
+	bool ifDead();
+	// 墙角的死锁
+	bool ifWallCorner();
+	// 是否存在四个箱子/墙壁形成一个田子的情况
+	bool ifTwoxTwo();
 };
