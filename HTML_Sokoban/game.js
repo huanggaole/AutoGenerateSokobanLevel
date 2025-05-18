@@ -15,6 +15,7 @@ let gameState = {
     boxes: [],
     targets: [],
     moves: 0,
+    boxPushes: 0,  // 添加箱子推动次数统计
     playerDirection: 'd',  // 玩家朝向：u(上)、d(下)、l(左)、r(右)
     isMoving: false,       // 是否正在移动
     animationFrame: 0,     // 当前动画帧 (0,1,2对应帧00,01,02)
@@ -76,6 +77,7 @@ function generateNewLevel() {
     gameState.boxes = [];
     gameState.targets = [];
     gameState.moves = 0;
+    gameState.boxPushes = 0;  // 重置箱子推动次数
     gameState.playerDirection = 'd';
     gameState.isMoving = false;
     gameState.animationFrame = 0;
@@ -137,6 +139,7 @@ function saveInitialState() {
 function resetLevel() {
     // 重置移动次数和动画状态
     gameState.moves = 0;
+    gameState.boxPushes = 0;  // 重置箱子推动次数
     gameState.playerDirection = 'd';
     gameState.isMoving = false;
     gameState.animationFrame = 0;
@@ -257,6 +260,7 @@ function movePlayer(dx, dy) {
         
         // 移动箱子
         gameState.boxes[boxIndex] = { x: newBoxX, y: newBoxY };
+        gameState.boxPushes++;  // 增加箱子推动次数
     } else {
         // 记录移动前的状态（用于撤销）
         recordMove(dx, dy, -1, null, null);
@@ -298,7 +302,7 @@ function animateStep() {
             setTimeout(() => {
                 gameState.animationStep = 1;
                 animateStep();
-            }, 100);
+            }, 20);
             break;
             
         case 1: // 第二步 - 显示01帧
@@ -314,7 +318,7 @@ function animateStep() {
             setTimeout(() => {
                 gameState.animationStep = 2;
                 animateStep();
-            }, 100);
+            }, 20);
             break;
             
         case 2: // 第三步 - 显示02帧并移动玩家到目标位置
@@ -338,13 +342,13 @@ function animateStep() {
                 
                 // 检查是否获胜
                 if (checkWin()) {
-                    alert(`恭喜！你完成了当前关卡，共移动 ${gameState.moves} 步！`);
+                    alert(`恭喜！你完成了当前关卡，共移动 ${gameState.moves} 步，推动箱子 ${gameState.boxPushes} 次！`);
                     generateNewLevel();
                 } else {
                     // 恢复最终状态
                     renderGame();
                 }
-            }, 100);
+            }, 20);
             break;
     }
 }
