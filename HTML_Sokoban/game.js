@@ -117,6 +117,11 @@ function updateAILevelInfo(minSteps, iterations, wallCount) {
 
 // 生成新关卡
 async function generateNewLevel() {
+    // 如果AI演示正在进行，先结束演示
+    if (aiDemoInProgress) {
+        endAiDemo();
+    }
+
     // 防止重复生成
     if (gameState.generatingLevel) {
         return;
@@ -253,6 +258,11 @@ function saveInitialState() {
 
 // 重置当前关卡
 function resetLevel() {
+    // 如果AI演示正在进行，先结束演示
+    if (aiDemoInProgress) {
+        endAiDemo();
+    }
+
     // 重置移动次数和动画状态
     gameState.moves = 0;
     gameState.boxPushes = 0;  // 重置箱子推动次数
@@ -1000,3 +1010,735 @@ if (document.readyState === 'loading') {
 window.undoMove = undoMove;
 window.resetLevel = resetLevel;
 window.generateNewLevel = generateNewLevel;
+window.aiDemonstration = aiDemonstration;
+
+// AI演示相关变量
+let aiDemoInProgress = false;
+let aiDemoSteps = [];
+let aiDemoCurrentStep = 0;
+let aiDemoInterval = null;
+let aiDemoPaused = false;
+const AI_DEMO_STEP_DELAY = 300; // 演示每步延迟(毫秒)
+
+/**
+ * AI演示功能
+ * 自动求解当前关卡并演示最优解
+ */
+async function aiDemonstration() {
+    // 如果玩家正在移动或正在生成关卡，则不响应
+    if (gameState.isMoving || gameState.generatingLevel) {
+        return;
+    }
+
+    // 如果演示已经在进行中
+    if (aiDemoInProgress) {
+        // 如果暂停中，继续演示
+        if (aiDemoPaused) {
+            resumeAiDemo();
+        }
+        // 否则暂停演示
+        else {
+            pauseAiDemo();
+        }
+        return;
+    }
+
+    // 重置当前关卡状态
+    resetLevel();
+
+    // 标记AI演示开始
+    aiDemoInProgress = true;
+    aiDemoPaused = false;
+    const demoBtn = document.getElementById('ai-demo-btn');
+    if (demoBtn) {
+        demoBtn.textContent = '暂停演示';
+        demoBtn.disabled = false;
+    }
+
+    // 创建用于求解的State对象
+    const solverState = await createSolverState();
+    if (!solverState) {
+        console.error('创建求解状态失败');
+        endAiDemo();
+        return;
+    }
+
+    // 求解当前关卡
+    try {
+        const solution = await solvePuzzle(solverState);
+        if (!solution || solution.length === 0) {
+            console.error('未找到解决方案');
+            alert('AI无法找到解决方案，请尝试其他关卡。');
+            endAiDemo();
+            return;
+        }
+
+        // 准备AI演示步骤
+        prepareAiDemoSteps(solution);
+
+        // 开始执行AI演示
+        aiDemoInterval = setInterval(executeNextAiDemoStep, AI_DEMO_STEP_DELAY);
+    } catch (error) {
+        console.error('AI演示求解过程出错:', error);
+        alert('AI演示过程出错，请重试。');
+        endAiDemo();
+    }
+}
+
+/**
+ * 暂停AI演示
+ */
+function pauseAiDemo() {
+    if (!aiDemoInProgress || aiDemoPaused) return;
+
+    // 清除定时器
+    if (aiDemoInterval) {
+        clearInterval(aiDemoInterval);
+        aiDemoInterval = null;
+    }
+
+    // 标记为暂停
+    aiDemoPaused = true;
+
+    // 更新按钮文本
+    const demoBtn = document.getElementById('ai-demo-btn');
+    if (demoBtn) {
+        demoBtn.textContent = '继续演示';
+    }
+
+    console.log('AI演示已暂停');
+}
+
+/**
+ * 继续AI演示
+ */
+function resumeAiDemo() {
+    if (!aiDemoInProgress || !aiDemoPaused) return;
+
+    // 重新开始定时器
+    aiDemoInterval = setInterval(executeNextAiDemoStep, AI_DEMO_STEP_DELAY);
+
+    // 取消暂停标记
+    aiDemoPaused = false;
+
+    // 更新按钮文本
+    const demoBtn = document.getElementById('ai-demo-btn');
+    if (demoBtn) {
+        demoBtn.textContent = '暂停演示';
+    }
+
+    console.log('AI演示已继续');
+}
+
+/**
+ * 执行下一个AI演示步骤
+ */
+function executeNextAiDemoStep() {
+    if (aiDemoCurrentStep >= aiDemoSteps.length) {
+        // 所有步骤完成，结束演示
+        endAiDemo();
+        return;
+    }
+
+    // 如果玩家正在移动，等待移动完成
+    if (gameState.isMoving) {
+        return;
+    }
+
+    // 获取当前步骤
+    const step = aiDemoSteps[aiDemoCurrentStep];
+
+    // 执行移动
+    movePlayer(step.dx, step.dy);
+
+    // 移动到下一步
+    aiDemoCurrentStep++;
+
+    // 更新AI演示进度显示
+    updateAiDemoProgress();
+
+    // 在移动日志中记录当前进度
+    console.log(`AI演示：步骤 ${aiDemoCurrentStep}/${aiDemoSteps.length}`);
+}
+
+/**
+ * 更新AI演示进度显示
+ */
+function updateAiDemoProgress() {
+    if (!aiDemoInProgress) {
+        // 如果演示已经结束，清除进度显示
+        const aiProgressElem = document.getElementById('ai-progress');
+        if (aiProgressElem) {
+            aiProgressElem.style.display = 'none';
+        }
+        return;
+    }
+
+    // 获取或创建进度显示元素
+    let aiProgressElem = document.getElementById('ai-progress');
+    if (!aiProgressElem) {
+        aiProgressElem = document.createElement('div');
+        aiProgressElem.id = 'ai-progress';
+        aiProgressElem.style.position = 'absolute';
+        aiProgressElem.style.bottom = '10px';
+        aiProgressElem.style.left = '10px';
+        aiProgressElem.style.background = 'rgba(0, 0, 0, 0.6)';
+        aiProgressElem.style.color = 'white';
+        aiProgressElem.style.padding = '5px 10px';
+        aiProgressElem.style.borderRadius = '4px';
+        aiProgressElem.style.fontSize = '14px';
+        aiProgressElem.style.zIndex = '100';
+
+        // 添加到游戏容器
+        const gameContainer = document.getElementById('game-container');
+        if (gameContainer) {
+            gameContainer.appendChild(aiProgressElem);
+        }
+    }
+
+    // 更新进度显示
+    const percentage = Math.floor((aiDemoCurrentStep / aiDemoSteps.length) * 100);
+    aiProgressElem.textContent = `AI演示: ${aiDemoCurrentStep}/${aiDemoSteps.length} (${percentage}%)`;
+    aiProgressElem.style.display = 'block';
+}
+
+/**
+ * 结束AI演示
+ */
+function endAiDemo() {
+    // 清除定时器
+    if (aiDemoInterval) {
+        clearInterval(aiDemoInterval);
+        aiDemoInterval = null;
+    }
+
+    // 重置AI演示状态
+    aiDemoInProgress = false;
+    aiDemoPaused = false;
+    aiDemoSteps = [];
+    aiDemoCurrentStep = 0;
+
+    // 清除进度显示
+    updateAiDemoProgress();
+
+    // 恢复按钮状态
+    const demoBtn = document.getElementById('ai-demo-btn');
+    if (demoBtn) {
+        demoBtn.textContent = 'AI演示';
+        demoBtn.disabled = false;
+    }
+
+    console.log('AI演示结束');
+}
+
+/**
+ * 创建用于求解的State对象
+ */
+async function createSolverState() {
+    try {
+        // 导入必要的模块
+        const { State } = await import('./js/State.js');
+        const { TileType } = await import('./js/GenerateLevel.js');
+
+        // 创建状态对象
+        const state = new State(config.boardSize.width, config.boardSize.height);
+
+        // 初始化瓦片数组
+        let tiles = new Array(config.boardSize.height * config.boardSize.width);
+
+        // 将游戏状态转换为求解器需要的状态
+        for (let i = 0; i < config.boardSize.height; i++) {
+            for (let j = 0; j < config.boardSize.width; j++) {
+                // 默认为地板
+                let tileType = TileType.Floor;
+
+                // 检查当前位置是什么类型
+                if (gameState.board[i][j] === 'wall') {
+                    tileType = TileType.Wall;
+                }
+
+                // 检查是否是目标点
+                const isTarget = gameState.targets.some(
+                    target => target.x === j && target.y === i
+                );
+
+                // 检查是否有箱子
+                const boxIndex = gameState.boxes.findIndex(
+                    box => box.x === j && box.y === i
+                );
+
+                // 检查是否是角色位置
+                const isPlayer = gameState.playerPos.x === j && gameState.playerPos.y === i;
+
+                // 根据组合情况设置瓦片类型
+                if (isPlayer) {
+                    tileType = isTarget ? TileType.CharacterinAid : TileType.Character;
+                } else if (boxIndex !== -1) {
+                    tileType = isTarget ? TileType.BoxinAid : TileType.Box;
+                } else if (isTarget) {
+                    tileType = TileType.Aid;
+                }
+
+                // 保存到瓦片数组
+                tiles[i * config.boardSize.width + j] = tileType;
+            }
+        }
+
+        // 设置关卡
+        state.setLevel(tiles);
+        return state;
+    } catch (error) {
+        console.error('创建求解器状态时出错:', error);
+        return null;
+    }
+}
+
+/**
+ * 求解推箱子关卡
+ * @param {State} state - 初始状态
+ * @returns {Array} 解决步骤
+ */
+async function solvePuzzle(state) {
+    try {
+        // 导入求解器
+        const { Solver } = await import('./js/Solver.js');
+
+        // 创建求解器实例
+        const solver = new Solver(state);
+
+        // 设置更高的最大迭代次数，确保能找到解决方案
+        solver.maxIterations = 10000;
+
+        // 执行求解
+        const result = solver.run();
+
+        if (result === 1) {
+            console.log('找到解决方案，步骤数:', solver.steplist.length - 1);
+            return solver.steplist;
+        } else if (result === -1) {
+            console.error('关卡无解');
+            return null;
+        } else {
+            console.error('求解超时');
+            return null;
+        }
+    } catch (error) {
+        console.error('求解过程出错:', error);
+        return null;
+    }
+}
+
+/**
+ * 准备AI演示步骤
+ * @param {Array} solution - 求解器返回的解决方案
+ */
+function prepareAiDemoSteps(solution) {
+    aiDemoSteps = [];
+    let lastPlayerPos = {
+        x: solution[0].currentstate.cx,
+        y: solution[0].currentstate.cy
+    };
+
+    // 跳过第一个状态（初始状态）
+    for (let i = 1; i < solution.length; i++) {
+        const currentNode = solution[i];
+        const prevNode = solution[i - 1];
+
+        // 调试信息
+        console.log(`处理步骤 ${i}/${solution.length - 1}`, {
+            lastPos: lastPlayerPos,
+            currentState: currentNode.currentstate
+        });
+
+        // 计算角色从上一状态到当前状态的移动
+        if (currentNode && prevNode) {
+            // 提取箱子位置
+            const prevBoxes = extractBoxPositions(prevNode.currentstate);
+            const currentBoxes = extractBoxPositions(currentNode.currentstate);
+            const currentPlayerPos = {
+                x: currentNode.currentstate.cx,
+                y: currentNode.currentstate.cy
+            };
+
+            // 检测箱子移动
+            const movedBoxInfo = findMovedBox(prevBoxes, currentBoxes);
+
+            if (movedBoxInfo) {
+                const { prevPos, currentPos } = movedBoxInfo;
+                // 计算推箱子的方向
+                const dx = currentPos.x - prevPos.x;
+                const dy = currentPos.y - prevPos.y;
+
+                // 验证移动方向的有效性
+                if (Math.abs(dx) + Math.abs(dy) !== 1) {
+                    console.error('无效的箱子移动方向', { dx, dy });
+                    continue;
+                }
+
+                // 计算玩家推箱子的位置
+                const playerPosBeforePush = {
+                    x: prevPos.x - dx,
+                    y: prevPos.y - dy
+                };
+
+                // 验证玩家位置的有效性
+                if (playerPosBeforePush.x < 0 || playerPosBeforePush.x >= prevNode.currentstate.width ||
+                    playerPosBeforePush.y < 0 || playerPosBeforePush.y >= prevNode.currentstate.height) {
+                    console.error('无效的玩家位置', playerPosBeforePush);
+                    continue;
+                }
+
+                // 寻找到推箱子位置的路径
+                const pathToBox = findPath(
+                    lastPlayerPos.x, lastPlayerPos.y,
+                    playerPosBeforePush.x, playerPosBeforePush.y,
+                    prevNode.currentstate
+                );
+
+                if (pathToBox.length === 0 &&
+                    !(lastPlayerPos.x === playerPosBeforePush.x &&
+                        lastPlayerPos.y === playerPosBeforePush.y)) {
+
+                    console.warn('寻找替代路径到箱子位置', {
+                        from: lastPlayerPos,
+                        to: playerPosBeforePush
+                    });
+
+                    const alternativePath = findAlternativePath(
+                        lastPlayerPos,
+                        playerPosBeforePush,
+                        prevNode.currentstate
+                    );
+
+                    if (alternativePath.length > 0) {
+                        console.log('找到替代路径');
+                        // 验证替代路径
+                        if (validatePath(alternativePath, prevNode.currentstate)) {
+                            for (let j = 1; j < alternativePath.length; j++) {
+                                const moveX = alternativePath[j].x - alternativePath[j - 1].x;
+                                const moveY = alternativePath[j].y - alternativePath[j - 1].y;
+                                aiDemoSteps.push({ dx: moveX, dy: moveY });
+                            }
+                        }
+                    }
+                } else {
+                    // 添加到箱子位置的移动步骤
+                    for (let j = 1; j < pathToBox.length; j++) {
+                        const moveX = pathToBox[j].x - pathToBox[j - 1].x;
+                        const moveY = pathToBox[j].y - pathToBox[j - 1].y;
+                        aiDemoSteps.push({ dx: moveX, dy: moveY });
+                    }
+                }
+
+                // 添加推箱子的步骤
+                aiDemoSteps.push({ dx, dy });
+                lastPlayerPos = { x: prevPos.x, y: prevPos.y };
+            } else if (lastPlayerPos.x !== currentPlayerPos.x || lastPlayerPos.y !== currentPlayerPos.y) {
+                // 处理玩家纯移动
+                const playerPath = findPath(
+                    lastPlayerPos.x, lastPlayerPos.y,
+                    currentPlayerPos.x, currentPlayerPos.y,
+                    prevNode.currentstate
+                );
+
+                if (playerPath.length > 0 && validatePath(playerPath, prevNode.currentstate)) {
+                    for (let j = 1; j < playerPath.length; j++) {
+                        const moveX = playerPath[j].x - playerPath[j - 1].x;
+                        const moveY = playerPath[j].y - playerPath[j - 1].y;
+                        aiDemoSteps.push({ dx: moveX, dy: moveY });
+                    }
+                    lastPlayerPos = { ...currentPlayerPos };
+                } else {
+                    console.warn('尝试替代路径进行玩家移动');
+                    const alternativePath = findAlternativePath(
+                        lastPlayerPos,
+                        currentPlayerPos,
+                        prevNode.currentstate
+                    );
+                    if (alternativePath.length > 0 && validatePath(alternativePath, prevNode.currentstate)) {
+                        for (let j = 1; j < alternativePath.length; j++) {
+                            const moveX = alternativePath[j].x - alternativePath[j - 1].x;
+                            const moveY = alternativePath[j].y - alternativePath[j - 1].y;
+                            aiDemoSteps.push({ dx: moveX, dy: moveY });
+                        }
+                        lastPlayerPos = { ...currentPlayerPos };
+                    }
+                }
+            }
+        }
+    }
+
+    aiDemoCurrentStep = 0;
+    console.log(`AI演示准备就绪，共${aiDemoSteps.length}步`, aiDemoSteps);
+}
+
+/**
+ * 寻找替代路径
+ * @param {Object} start - 起始位置
+ * @param {Object} target - 目标位置
+ * @param {State} state - 游戏状态
+ * @returns {Array} 路径数组
+ */
+function findAlternativePath(start, target, state) {
+    // 尝试不同的中间点
+    const midPoints = [
+        { x: start.x, y: target.y },
+        { x: target.x, y: start.y },
+        { x: start.x - 1, y: start.y },
+        { x: start.x + 1, y: start.y },
+        { x: start.x, y: start.y - 1 },
+        { x: start.x, y: start.y + 1 }
+    ];
+
+    for (const mid of midPoints) {
+        // 检查中间点是否在地图范围内
+        if (mid.x < 0 || mid.y < 0 || mid.x >= state.width || mid.y >= state.height) {
+            continue;
+        }
+
+        // 尝试通过中间点寻路
+        const path1 = findPath(start.x, start.y, mid.x, mid.y, state);
+        if (path1.length > 0) {
+            const path2 = findPath(mid.x, mid.y, target.x, target.y, state);
+            if (path2.length > 0) {
+                // 合并路径，去除重复的中间点
+                return [...path1, ...path2.slice(1)];
+            }
+        }
+    }
+
+    return [];
+}
+
+/**
+ * 从状态中提取箱子位置信息
+ * @param {State} state - 游戏状态
+ * @returns {Array} 箱子位置数组
+ */
+function extractBoxPositions(state) {
+    // 导入 TileType 的值
+    const TileType = {
+        Box: 1,
+        BoxinAid: 2
+    };
+
+    const boxes = [];
+    for (let i = 0; i < state.height; i++) {
+        for (let j = 0; j < state.width; j++) {
+            if (state.tiles[i * state.width + j] === TileType.Box ||
+                state.tiles[i * state.width + j] === TileType.BoxinAid) {
+                boxes.push({ x: j, y: i });
+            }
+        }
+    }
+    return boxes;
+}
+
+/**
+ * 查找哪个箱子被移动了
+ * @param {Array} prevBoxes - 前一状态的箱子位置
+ * @param {Array} currentBoxes - 当前状态的箱子位置
+ * @returns {Object|null} 移动的箱子信息
+ */
+function findMovedBox(prevBoxes, currentBoxes) {
+    // 找出哪个箱子被移动了
+    for (const prevBox of prevBoxes) {
+        let found = false;
+        for (const currentBox of currentBoxes) {
+            if (prevBox.x === currentBox.x && prevBox.y === currentBox.y) {
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            // 这个箱子已经移动，找出它移动到哪里了
+            for (const currentBox of currentBoxes) {
+                let isNew = true;
+                for (const pb of prevBoxes) {
+                    if (pb.x === currentBox.x && pb.y === currentBox.y) {
+                        isNew = false;
+                        break;
+                    }
+                }
+
+                if (isNew) {
+                    // 找到了移动的箱子
+                    return {
+                        prevPos: { x: prevBox.x, y: prevBox.y },
+                        currentPos: { x: currentBox.x, y: currentBox.y }
+                    };
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * 使用广度优先搜索（BFS）寻找路径
+ * @param {number} startX - 起点X坐标
+ * @param {number} startY - 起点Y坐标
+ * @param {number} targetX - 目标X坐标
+ * @param {number} targetY - 目标Y坐标
+ * @param {State} state - 当前游戏状态
+ * @returns {Array} 路径点数组
+ */
+function findPath(startX, startY, targetX, targetY, state) {
+    // 如果起点和终点相同，直接返回
+    if (startX === targetX && startY === targetY) {
+        return [{ x: startX, y: startY }];
+    }
+
+    // 导入 TileType 的值
+    const TileType = {
+        Wall: 5,
+        Box: 1,
+        BoxinAid: 2
+    };
+
+    // 定义方向：上、右、下、左
+    const directions = [
+        { dx: 0, dy: -1, dir: 'up' },
+        { dx: 1, dy: 0, dir: 'right' },
+        { dx: 0, dy: 1, dir: 'down' },
+        { dx: -1, dy: 0, dir: 'left' }
+    ];
+
+    // 创建访问标记数组
+    const visited = Array(state.height).fill().map(() => Array(state.width).fill(false));
+
+    // 创建前驱节点数组，用于重建路径
+    const prev = Array(state.height).fill().map(() => Array(state.width).fill(null));
+
+    // 创建方向数组，记录到达每个点的方向
+    const directionMap = Array(state.height).fill().map(() => Array(state.width).fill(null));
+
+    // 广度优先搜索队列
+    const queue = [{ x: startX, y: startY }];
+    visited[startY][startX] = true;
+
+    // BFS寻路
+    while (queue.length > 0) {
+        const current = queue.shift();
+
+        // 如果找到目标，重建路径并返回
+        if (current.x === targetX && current.y === targetY) {
+            const path = reconstructPath(prev, startX, startY, targetX, targetY);
+            // 验证路径的有效性
+            if (validatePath(path, state)) {
+                return path;
+            }
+            // 如果路径无效，继续搜索
+            continue;
+        }
+
+        // 尝试四个方向
+        for (const dir of directions) {
+            const nx = current.x + dir.dx;
+            const ny = current.y + dir.dy;
+
+            // 检查边界
+            if (nx < 0 || ny < 0 || nx >= state.width || ny >= state.height) {
+                continue;
+            }
+
+            // 检查是否已经访问过
+            if (visited[ny][nx]) {
+                continue;
+            }
+
+            // 检查是否是墙壁或箱子
+            const tile = state.tiles[ny * state.width + nx];
+            if (tile === TileType.Wall || tile === TileType.Box || tile === TileType.BoxinAid) {
+                // 如果是目标位置，则允许经过
+                if (!(nx === targetX && ny === targetY)) {
+                    continue;
+                }
+            }
+
+            // 标记为已访问
+            visited[ny][nx] = true;
+            prev[ny][nx] = { x: current.x, y: current.y };
+            directionMap[ny][nx] = dir.dir;
+            queue.push({ x: nx, y: ny });
+        }
+    }
+
+    // 如果没有找到路径，返回空数组
+    return [];
+}
+
+/**
+ * 验证路径的有效性
+ * @param {Array} path - 路径数组
+ * @param {State} state - 游戏状态
+ * @returns {boolean} 路径是否有效
+ */
+function validatePath(path, state) {
+    if (!path || path.length < 2) return true;
+
+    const TileType = {
+        Wall: 5,
+        Box: 1,
+        BoxinAid: 2
+    };
+
+    // 检查每一步是否有效
+    for (let i = 1; i < path.length; i++) {
+        const current = path[i];
+        const prev = path[i - 1];
+
+        // 计算移动方向
+        const dx = current.x - prev.x;
+        const dy = current.y - prev.y;
+
+        // 检查是否是有效的单步移动
+        if (Math.abs(dx) + Math.abs(dy) !== 1) {
+            console.warn('无效的移动步骤：非相邻格子', { from: prev, to: current });
+            return false;
+        }
+
+        // 检查目标格子是否可通行
+        const tile = state.tiles[current.y * state.width + current.x];
+        if (tile === TileType.Wall) {
+            console.warn('无效的移动步骤：撞墙', { pos: current });
+            return false;
+        }
+
+        // 检查是否穿过箱子（除非是终点）
+        if ((tile === TileType.Box || tile === TileType.BoxinAid) &&
+            !(current.x === path[path.length - 1].x && current.y === path[path.length - 1].y)) {
+            console.warn('无效的移动步骤：穿过箱子', { pos: current });
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * 重建从起点到终点的路径
+ * @param {Array} prev - 前驱节点数组
+ * @param {number} startX - 起点X坐标
+ * @param {number} startY - 起点Y坐标
+ * @param {number} targetX - 目标X坐标
+ * @param {number} targetY - 目标Y坐标
+ * @returns {Array} 路径点数组
+ */
+function reconstructPath(prev, startX, startY, targetX, targetY) {
+    const path = [];
+    let current = { x: targetX, y: targetY };
+
+    // 从终点回溯到起点
+    while (current !== null && !(current.x === startX && current.y === startY)) {
+        path.unshift(current);
+        current = prev[current.y][current.x];
+    }
+
+    // 添加起点
+    path.unshift({ x: startX, y: startY });
+
+    return path;
+}
