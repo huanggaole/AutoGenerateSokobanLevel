@@ -1314,6 +1314,7 @@ async function solvePuzzle(state) {
 
         if (result === 1) {
             console.log('找到解决方案，步骤数:', solver.steplist.length - 1);
+            console.log('解决方案:', solver.steplist);
             return solver.steplist;
         } else if (result === -1) {
             console.error('关卡无解');
@@ -1344,6 +1345,16 @@ function prepareAiDemoSteps(solution) {
         const currentNode = solution[i];
         const prevNode = solution[i - 1];
 
+        console.log('第' + i + '步状态:');
+        var stateshow = "";
+        for(let j = 0; j < currentNode.currentstate.height; j++){
+            for(let k = 0; k < currentNode.currentstate.width; k++){
+                stateshow += currentNode.currentstate.tiles[j * currentNode.currentstate.width + k] + " ";
+            }
+            stateshow += "\n";
+        }
+        console.log(stateshow);
+
         // 调试信息
         console.log(`处理步骤 ${i}/${solution.length - 1}`, {
             lastPos: lastPlayerPos,
@@ -1352,19 +1363,17 @@ function prepareAiDemoSteps(solution) {
 
         // 计算角色从上一状态到当前状态的移动
         if (currentNode && prevNode) {
-            // 提取箱子位置
-            const prevBoxes = extractBoxPositions(prevNode.currentstate);
-            const currentBoxes = extractBoxPositions(currentNode.currentstate);
             const currentPlayerPos = {
                 x: currentNode.currentstate.cx,
                 y: currentNode.currentstate.cy
             };
 
             // 检测箱子移动
-            const movedBoxInfo = findMovedBox(prevBoxes, currentBoxes);
-
+            const movedBoxInfo = findMovedBox(prevNode.currentstate, currentNode.currentstate);
+            
             if (movedBoxInfo) {
                 const { prevPos, currentPos } = movedBoxInfo;
+                console.log("movedBoxInfo",prevPos,currentPos);
                 // 计算推箱子的方向
                 const dx = currentPos.x - prevPos.x;
                 const dy = currentPos.y - prevPos.y;
@@ -1511,69 +1520,62 @@ function findAlternativePath(start, target, state) {
 }
 
 /**
- * 从状态中提取箱子位置信息
- * @param {State} state - 游戏状态
- * @returns {Array} 箱子位置数组
+ * 查找哪个箱子被移动了
+ * @param {State} prevState - 前一状态
+ * @param {State} currentState - 当前状态
+ * @returns {Object|null} 移动的箱子信息
  */
-function extractBoxPositions(state) {
-    // 导入 TileType 的值
-    const TileType = {
-        Box: 1,
-        BoxinAid: 2
-    };
-
-    const boxes = [];
-    for (let i = 0; i < state.height; i++) {
-        for (let j = 0; j < state.width; j++) {
-            if (state.tiles[i * state.width + j] === TileType.Box ||
-                state.tiles[i * state.width + j] === TileType.BoxinAid) {
-                boxes.push({ x: j, y: i });
+function findMovedBox(prevState, currentState) {
+    // 找出哪个箱子被移动了
+    const width = prevState.width;
+    const height = prevState.height;
+    var prevBox = {x: -1, y: -1};
+    var currentBox = {x: -1, y: -1};
+    for(let i = 0; i < height; i++){
+        for(let j = 0; j < width; j++){
+            if(prevState.tiles[i * width + j] === 1 || prevState.tiles[i * width + j] === 2){
+                console.log("prevBox",j,i,prevState.tiles[i * width + j],currentState.tiles[i * width + j]);
+                // 目标点变为墙，即使不一样也不作为可移动的箱子
+                if(prevState.tiles[i * width + j] == 2 &&currentState.tiles[i * width + j] == 5){
+                    continue;
+                }
+                if(currentState.tiles[i * width + j] !== prevState.tiles[i * width + j]){
+                    prevBox.x = j;
+                    prevBox.y = i;
+                }
             }
         }
     }
-    return boxes;
-}
-
-/**
- * 查找哪个箱子被移动了
- * @param {Array} prevBoxes - 前一状态的箱子位置
- * @param {Array} currentBoxes - 当前状态的箱子位置
- * @returns {Object|null} 移动的箱子信息
- */
-function findMovedBox(prevBoxes, currentBoxes) {
-    // 找出哪个箱子被移动了
-    for (const prevBox of prevBoxes) {
-        let found = false;
-        for (const currentBox of currentBoxes) {
-            if (prevBox.x === currentBox.x && prevBox.y === currentBox.y) {
-                found = true;
+    /*
+    if(prevBox === null){
+        return null;
+    }
+    */
+    var adjx = [prevBox.x, prevBox.x, prevBox.x + 1, prevBox.x - 1];
+    var adjy = [prevBox.y + 1, prevBox.y - 1, prevBox.y, prevBox.y];
+    for(let i = 0; i < 4; i++){
+        if(adjx[i] < 0 || adjx[i] >= width || adjy[i] < 0 || adjy[i] >= height){
+            continue;
+        }
+        if(currentState.tiles[adjy[i] * width + adjx[i]] === 1 || currentState.tiles[adjy[i] * width + adjx[i]] === 2 || currentState.tiles[adjy[i] * width + adjx[i]] === 5){
+            console.log("currentBox",adjx[i],adjy[i],currentState.tiles[adjy[i] * width + adjx[i]],prevState.tiles[adjy[i] * width + adjx[i]]);
+            if(currentState.tiles[adjy[i] * width + adjx[i]] !== prevState.tiles[adjy[i] * width + adjx[i]]){
+                currentBox.x = adjx[i];
+                currentBox.y = adjy[i];
                 break;
             }
         }
-
-        if (!found) {
-            // 这个箱子已经移动，找出它移动到哪里了
-            for (const currentBox of currentBoxes) {
-                let isNew = true;
-                for (const pb of prevBoxes) {
-                    if (pb.x === currentBox.x && pb.y === currentBox.y) {
-                        isNew = false;
-                        break;
-                    }
-                }
-
-                if (isNew) {
-                    // 找到了移动的箱子
-                    return {
-                        prevPos: { x: prevBox.x, y: prevBox.y },
-                        currentPos: { x: currentBox.x, y: currentBox.y }
-                    };
-                }
-            }
-        }
     }
+    /*
+    if(currentBox === null){
+        return null;
+    }
+        */
+    return {
+        prevPos: { x: prevBox.x, y: prevBox.y },
+        currentPos: { x: currentBox.x, y: currentBox.y }
+    };
 
-    return null;
 }
 
 /**
