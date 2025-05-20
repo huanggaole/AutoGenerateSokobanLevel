@@ -56,10 +56,3 @@ AutoGenerateSokobanLevel/
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 开启一个Pull Request
 
-## 版权信息
-
-本项目采用 [MIT许可证](LICENSE) 开源。
-
-## 联系方式
-
-如有任何问题或建议，欢迎联系项目维护者。 
