@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,21 +16,21 @@
             background-color: #f0f0f0;
             font-family: Arial, sans-serif;
         }
-        
+
         h1 {
             color: #333;
             margin-bottom: 20px;
         }
-        
+
         #game-container {
             position: relative;
             border: 2px solid #333;
         }
-        
+
         #game-canvas {
             display: block;
         }
-        
+
         .controls {
             margin-top: 20px;
             display: flex;
@@ -38,7 +39,7 @@
             justify-content: center;
             width: 100%;
         }
-        
+
         button {
             margin: 0 10px;
             padding: 8px 16px;
@@ -49,11 +50,11 @@
             cursor: pointer;
             min-width: 100px;
         }
-        
+
         button:hover {
             background-color: #45a049;
         }
-        
+
         .instructions {
             margin-top: 20px;
             max-width: 600px;
@@ -78,107 +79,97 @@
             margin: 20px;
             padding: 10px;
         }
+
+        #ai-info {
+            margin-top: 10px;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .ai-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            background-color: #007bff;
+            color: white;
+            border-radius: 4px;
+            margin-left: 5px;
+            font-size: 0.8em;
+        }
     </style>
 </head>
+
 <body>
     <h1>AI生成推箱子关卡</h1>
-    
+
     <div id="error-message"></div>
     <div id="loading-message">正在加载游戏资源...</div>
-    
+
     <div id="game-container">
         <canvas id="game-canvas"></canvas>
     </div>
-    
+
     <div class="controls">
         <button onclick="resetLevel()" id="reset-btn">重置关卡</button>
         <button onclick="generateNewLevel()" id="new-level-btn">新关卡</button>
         <button onclick="undoMove()" id="undo-btn">撤销</button>
     </div>
-    
+
+    <div id="ai-info"></div>
+
     <div class="instructions">
         <p>使用方向键或WASD键移动玩家，将所有箱子推到目标点上即可完成关卡。</p>
         <p>按Z键或回退键可以撤销上一步。</p>
+        <p><span class="ai-badge">AI</span> 关卡由AI算法自动生成，保证有解且具有一定难度。</p>
     </div>
-    
+
+    <!-- 创建js目录以存放模块文件 -->
     <script>
+        // 确保js目录结构存在
+        async function createJsDirectory() {
+            try {
+                const response = await fetch('js/');
+                if (!response.ok && response.status === 404) {
+                    console.warn('js目录不存在，请确保创建了js目录并包含所有模块文件');
+                }
+            } catch (error) {
+                console.warn('无法检查js目录:', error);
+            }
+        }
+
         // 当页面DOM加载完成后
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             // 这个函数将在DOM完全加载后被调用，但图片和脚本可能还在加载中
             console.log('DOM已加载，准备加载游戏脚本');
-            
+
+            // 检查js目录
+            createJsDirectory();
+
             // 加载游戏脚本
             var gameScript = document.createElement('script');
             gameScript.src = 'game.js';
-            gameScript.onerror = function() {
+            gameScript.type = 'module';  // 使用ES6模块
+
+            gameScript.onerror = function () {
                 document.getElementById('error-message').style.display = 'block';
                 document.getElementById('error-message').textContent = '游戏脚本加载失败！请检查网络连接并刷新页面。';
                 document.getElementById('loading-message').style.display = 'none';
             };
-            gameScript.onload = function() {
+
+            gameScript.onload = function () {
                 console.log('游戏脚本加载完成');
-                document.getElementById('loading-message').style.display = 'none';
-                
-                // 游戏脚本加载完成后，自动修复白边问题
-                setTimeout(function() {
-                    if (window.ctx && window.images && window.renderGame) {
-                        // 保存原来的渲染函数以便调试
-                        window.originalRenderGame = window.renderGame;
-                        
-                        // 替换为新的渲染函数
-                        window.renderGame = function() {
-                            // 清除画布
-                            ctx.clearRect(0, 0, config.canvasWidth, config.canvasHeight);
-                            
-                            // 首先绘制所有格子的地板作为背景
-                            for (let y = 0; y < config.boardSize.height; y++) {
-                                for (let x = 0; x < config.boardSize.width; x++) {
-                                    const posX = x * config.tileSize;
-                                    const posY = y * config.tileSize;
-                                    ctx.drawImage(images.floor, posX, posY, config.tileSize, config.tileSize);
-                                }
-                            }
-                            
-                            // 然后绘制墙壁
-                            for (let y = 0; y < config.boardSize.height; y++) {
-                                for (let x = 0; x < config.boardSize.width; x++) {
-                                    if (gameState.board[y][x] === 'wall') {
-                                        const posX = x * config.tileSize;
-                                        const posY = y * config.tileSize;
-                                        ctx.drawImage(images.wall, posX, posY, config.tileSize, config.tileSize);
-                                    }
-                                }
-                            }
-                            
-                            // 渲染目标点
-                            gameState.targets.forEach(target => {
-                                const posX = target.x * config.tileSize;
-                                const posY = target.y * config.tileSize;
-                                ctx.drawImage(images.target, posX, posY, config.tileSize, config.tileSize);
-                            });
-                            
-                            // 渲染箱子
-                            gameState.boxes.forEach(box => {
-                                const posX = box.x * config.tileSize;
-                                const posY = box.y * config.tileSize;
-                                ctx.drawImage(images.box, posX, posY, config.tileSize, config.tileSize);
-                            });
-                            
-                            // 渲染玩家
-                            renderPlayer();
-                        };
-                        
-                        // 重新渲染以应用更改
-                        renderGame();
-                        console.log('白边问题已自动修复');
-                    } else {
-                        console.warn('无法修复白边问题：游戏未完全加载，将尝试使用原始渲染');
-                    }
-                }, 1000); // 等待1秒确保游戏加载完成
             };
-            
+
             document.body.appendChild(gameScript);
+
+            // 监听AI关卡生成信息事件
+            window.addEventListener('ai-level-generated', function (e) {
+                const aiInfo = document.getElementById('ai-info');
+                if (aiInfo && e.detail) {
+                    aiInfo.textContent = `AI关卡信息: 箱子最少推动次数 ${e.detail.minSteps}, 生成迭代次数 ${e.detail.iterations}, 墙壁数量 ${e.detail.wallCount || '未知'}`;
+                }
+            });
         });
     </script>
 </body>
+
 </html>

@@ -1,3 +1,5 @@
+// game.js - 推箱子游戏主文件
+
 // 游戏配置
 const config = {
     boardSize: { width: 10, height: 10 },
@@ -5,7 +7,10 @@ const config = {
     numWalls: 20,
     tileSize: 40, // 每个格子大小单位：像素，例如347
     canvasWidth: 0,  // 将在初始化时设置
-    canvasHeight: 0  // 将在初始化时设置
+    canvasHeight: 0,  // 将在初始化时设置
+    useAIGeneration: true, // 是否使用AI生成关卡
+    aiGenerationMaxTries: 100, // 适当减少AI生成关卡最大尝试次数，原来是100
+    aiTimeout: 8000 // AI生成超时时间（毫秒）
 };
 
 // 游戏状态
@@ -22,7 +27,9 @@ let gameState = {
     animationStep: 0,      // 移动步骤 (0,1,2)
     startPos: { x: 0, y: 0 },  // 移动起始点
     targetPos: { x: 0, y: 0 },   // 移动目标点
-    moveHistory: []        // 移动历史记录，用于撤销功能
+    moveHistory: [],       // 移动历史记录，用于撤销功能
+    generatingLevel: false, // 是否正在生成关卡
+    minSolutionSteps: 0    // 最少解决步骤数
 };
 
 // 保存初始关卡状态以便重置
@@ -41,11 +48,14 @@ function deepCopy(obj) {
 // Canvas和上下文
 let canvas, ctx;
 
+// AI关卡生成器导入
+let AILevelGenerator;
+
 // 初始化游戏板
 function initializeBoard() {
     gameState.board = Array(config.boardSize.height).fill().map(() =>
         Array(config.boardSize.width).fill('floor'));
-    
+
     // 添加边界墙
     for (let i = 0; i < config.boardSize.height; i++) {
         gameState.board[i][0] = 'wall';
@@ -68,12 +78,50 @@ function getRandomPosition() {
 // 检查位置是否为空
 function isPositionEmpty(pos) {
     return gameState.board[pos.y][pos.x] === 'floor' &&
-           !gameState.boxes.some(box => box.x === pos.x && box.y === pos.y) &&
-           !(gameState.playerPos.x === pos.x && gameState.playerPos.y === pos.y);
+        !gameState.boxes.some(box => box.x === pos.x && box.y === pos.y) &&
+        !(gameState.playerPos.x === pos.x && gameState.playerPos.y === pos.y);
+}
+
+// 更新生成进度UI
+function updateGenerationProgress(progress) {
+    const loadingMsg = document.getElementById('loading-message');
+    if (loadingMsg) {
+        loadingMsg.style.display = 'block';
+        loadingMsg.textContent = `正在AI生成关卡: ${progress.progress}% (迭代 ${progress.iteration}/${progress.maxTries})`;
+    }
+}
+
+// 隐藏生成进度UI
+function hideGenerationProgress() {
+    const loadingMsg = document.getElementById('loading-message');
+    if (loadingMsg) {
+        loadingMsg.style.display = 'none';
+    }
+}
+
+// 更新AI关卡生成信息
+function updateAILevelInfo(minSteps, iterations, wallCount) {
+    // 创建并分发自定义事件
+    const event = new CustomEvent('ai-level-generated', {
+        detail: {
+            minSteps: minSteps,
+            iterations: iterations,
+            wallCount: wallCount
+        }
+    });
+    window.dispatchEvent(event);
+
+    // 隐藏加载信息
+    hideGenerationProgress();
 }
 
 // 生成新关卡
-function generateNewLevel() {
+async function generateNewLevel() {
+    // 防止重复生成
+    if (gameState.generatingLevel) {
+        return;
+    }
+
     gameState.boxes = [];
     gameState.targets = [];
     gameState.moves = 0;
@@ -83,9 +131,82 @@ function generateNewLevel() {
     gameState.animationFrame = 0;
     gameState.animationStep = 0;
     gameState.moveHistory = []; // 清空移动历史
-    
+    gameState.generatingLevel = true; // 标记正在生成关卡
+
+    // 设置生成超时
+    let generationTimeout = null;
+    const timeoutPromise = new Promise((resolve) => {
+        generationTimeout = setTimeout(() => {
+            console.warn("关卡生成超时！使用备用方法");
+            resolve({ timedOut: true });
+        }, config.aiTimeout);
+    });
+
     initializeBoard();
 
+    // 使用AI生成关卡
+    if (config.useAIGeneration && AILevelGenerator) {
+        try {
+            updateGenerationProgress({ iteration: 0, maxTries: config.aiGenerationMaxTries, progress: 0 });
+
+            const generator = new AILevelGenerator(config.boardSize.width, config.boardSize.height);
+            generator.maxGenerationTime = config.aiTimeout - 1000; // 给主流程留出1秒钟冗余
+
+            // 竞争超时和正常结果
+            const result = await Promise.race([
+                generator.generateLevel(config.aiGenerationMaxTries, updateGenerationProgress),
+                timeoutPromise
+            ]);
+
+            // 清除超时定时器
+            if (generationTimeout) {
+                clearTimeout(generationTimeout);
+                generationTimeout = null;
+            }
+
+            if (result.timedOut) {
+                // 处理超时情况
+                console.warn("AI生成关卡超时，使用随机生成方法");
+                generateRandomLevel();
+            } else if (result.success) {
+                // 使用AI生成的关卡
+                gameState.board = deepCopy(result.level.board);
+                gameState.playerPos = deepCopy(result.level.playerPos);
+                gameState.boxes = deepCopy(result.level.boxes);
+                gameState.targets = deepCopy(result.level.targets);
+                gameState.minSolutionSteps = result.minSteps;
+
+                // 显示最少步数
+                console.log(`AI生成的关卡解决方案最少步数: ${result.minSteps}, 经过了${result.iterations}次迭代, 墙壁数量: ${result.wallCount}`);
+
+                // 更新AI信息区域
+                updateAILevelInfo(result.minSteps, result.iterations, result.wallCount);
+            } else {
+                // AI生成失败，使用随机生成
+                console.error('AI生成关卡失败:', result.error);
+                generateRandomLevel();
+            }
+        } catch (error) {
+            console.error('AI生成关卡异常:', error);
+            generateRandomLevel();
+        } finally {
+            hideGenerationProgress();
+        }
+    } else {
+        // 使用原来的随机生成逻辑
+        generateRandomLevel();
+    }
+
+    // 保存初始关卡状态
+    saveInitialState();
+    gameState.generatingLevel = false;
+
+    // 渲染关卡
+    renderGame();
+}
+
+// 原始的随机生成逻辑
+function generateRandomLevel() {
     // 放置玩家
     let pos = getRandomPosition();
     while (!isPositionEmpty(pos)) {
@@ -102,14 +223,14 @@ function generateNewLevel() {
         while (!isPositionEmpty(pos)) {
             pos = getRandomPosition();
         }
-        gameState.boxes.push({...pos});
+        gameState.boxes.push({ ...pos });
 
         // 放置目标
         pos = getRandomPosition();
         while (!isPositionEmpty(pos)) {
             pos = getRandomPosition();
         }
-        gameState.targets.push({...pos});
+        gameState.targets.push({ ...pos });
     }
 
     // 放置额外的墙
@@ -120,11 +241,6 @@ function generateNewLevel() {
         }
         gameState.board[pos.y][pos.x] = 'wall';
     }
-    
-    // 保存初始关卡状态
-    saveInitialState();
-
-    renderGame();
 }
 
 // 保存当前关卡的初始状态
@@ -145,17 +261,17 @@ function resetLevel() {
     gameState.animationFrame = 0;
     gameState.animationStep = 0;
     gameState.moveHistory = []; // 清空移动历史
-    
+
     // 从初始状态还原关卡
     gameState.board = deepCopy(initialLevelState.board);
     gameState.playerPos = deepCopy(initialLevelState.playerPos);
     gameState.boxes = deepCopy(initialLevelState.boxes);
     gameState.targets = deepCopy(initialLevelState.targets);
-    
+
     // 更新起始位置和目标位置
     gameState.startPos = { ...gameState.playerPos };
     gameState.targetPos = { ...gameState.playerPos };
-    
+
     // 重新渲染游戏
     renderGame();
 }
@@ -175,9 +291,9 @@ function recordMove(dx, dy, boxIndex, newBoxX, newBoxY) {
         movedBoxIndex: boxIndex,
         boxPos: boxIndex !== -1 ? deepCopy(gameState.boxes[boxIndex]) : null
     };
-    
+
     gameState.moveHistory.push(historyEntry);
-    
+
     // 如果历史记录太长，可以限制最大记录数
     if (gameState.moveHistory.length > 100) {
         gameState.moveHistory.shift(); // 移除最早的记录
@@ -190,26 +306,26 @@ function undoMove() {
     if (gameState.isMoving || gameState.moveHistory.length === 0) {
         return;
     }
-    
+
     // 获取上一步的状态
     const lastMove = gameState.moveHistory.pop();
-    
+
     // 恢复玩家位置和方向
     gameState.playerPos = lastMove.playerPos;
     gameState.playerDirection = lastMove.playerDirection;
     gameState.startPos = { ...lastMove.playerPos };
     gameState.targetPos = { ...lastMove.playerPos };
-    
+
     // 如果上一步涉及到移动箱子，恢复箱子位置
     if (lastMove.movedBoxIndex !== -1 && lastMove.boxPos) {
         gameState.boxes[lastMove.movedBoxIndex] = lastMove.boxPos;
     }
-    
+
     // 减少移动次数
     if (gameState.moves > 0) {
         gameState.moves--;
     }
-    
+
     // 重新渲染游戏
     renderGame();
 }
@@ -217,12 +333,12 @@ function undoMove() {
 // 移动玩家
 function movePlayer(dx, dy) {
     if (gameState.isMoving) return; // 如果正在移动则忽略输入
-    
+
     // 更新玩家位置
     const currentX = Math.round(gameState.playerPos.x);
     const currentY = Math.round(gameState.playerPos.y);
     gameState.playerPos = { x: currentX, y: currentY };
-    
+
     // 计算新位置
     const newX = currentX + dx;
     const newY = currentY + dy;
@@ -240,16 +356,16 @@ function movePlayer(dx, dy) {
     }
 
     // 检查是否推箱子
-    const boxIndex = gameState.boxes.findIndex(box => 
+    const boxIndex = gameState.boxes.findIndex(box =>
         Math.round(box.x) === newX && Math.round(box.y) === newY);
-        
+
     if (boxIndex !== -1) {
         const newBoxX = newX + dx;
         const newBoxY = newY + dy;
 
         // 检查箱子是否可以移动
         if (gameState.board[newBoxY][newBoxX] === 'wall' ||
-            gameState.boxes.some(box => 
+            gameState.boxes.some(box =>
                 Math.round(box.x) === newBoxX && Math.round(box.y) === newBoxY)) {
             renderGame(); // 更新朝向
             return;
@@ -257,7 +373,7 @@ function movePlayer(dx, dy) {
 
         // 记录移动前的状态（用于撤销）
         recordMove(dx, dy, boxIndex, newBoxX, newBoxY);
-        
+
         // 移动箱子
         gameState.boxes[boxIndex] = { x: newBoxX, y: newBoxY };
         gameState.boxPushes++;  // 增加箱子推动次数
@@ -272,7 +388,7 @@ function movePlayer(dx, dy) {
     gameState.animationStep = 0;  // 开始移动步骤
     gameState.animationFrame = 0; // 重置动画帧
     gameState.isMoving = true;    // 开始移动动画
-    
+
     // 开始移动步骤
     animateStep();
 }
@@ -280,58 +396,58 @@ function movePlayer(dx, dy) {
 // 移动步骤
 function animateStep() {
     if (!gameState.isMoving) return;
-    
+
     // 获取当前步骤和目标位置
     const startX = gameState.startPos.x;
     const startY = gameState.startPos.y;
     const targetX = gameState.targetPos.x;
     const targetY = gameState.targetPos.y;
-    
+
     // 根据当前步骤设置相应的动画帧
     switch (gameState.animationStep) {
         case 0: // 第一步 - 显示00帧
             gameState.animationFrame = 0; // 对应帧00
-            
+
             // 插值第一步: 起始点*0.75 + 终点*0.25
-            gameState.playerPos = { 
-                x: startX * 0.75 + targetX * 0.25, 
-                y: startY * 0.75 + targetY * 0.25 
+            gameState.playerPos = {
+                x: startX * 0.75 + targetX * 0.25,
+                y: startY * 0.75 + targetY * 0.25
             };
-            
+
             renderGame();
             setTimeout(() => {
                 gameState.animationStep = 1;
                 animateStep();
             }, 20);
             break;
-            
+
         case 1: // 第二步 - 显示01帧
             gameState.animationFrame = 1; // 对应帧01
-            
+
             // 插值第二步: 起始点*0.5 + 终点*0.5
-            gameState.playerPos = { 
-                x: startX * 0.5 + targetX * 0.5, 
-                y: startY * 0.5 + targetY * 0.5 
+            gameState.playerPos = {
+                x: startX * 0.5 + targetX * 0.5,
+                y: startY * 0.5 + targetY * 0.5
             };
-            
+
             renderGame();
             setTimeout(() => {
                 gameState.animationStep = 2;
                 animateStep();
             }, 20);
             break;
-            
+
         case 2: // 第三步 - 显示02帧并移动玩家到目标位置
             gameState.animationFrame = 2; // 对应帧02
-            
+
             // 插值第三步: 起始点*0.25 + 终点*0.75
-            gameState.playerPos = { 
-                x: startX * 0.25 + targetX * 0.75, 
-                y: startY * 0.25 + targetY * 0.75 
+            gameState.playerPos = {
+                x: startX * 0.25 + targetX * 0.75,
+                y: startY * 0.25 + targetY * 0.75
             };
-            
+
             renderGame();
-            
+
             // 移动完成
             setTimeout(() => {
                 // 更新游戏状态
@@ -339,11 +455,23 @@ function animateStep() {
                 gameState.isMoving = false;
                 gameState.animationFrame = 0;
                 gameState.moves++;
-                
+
                 // 检查是否获胜
                 if (checkWin()) {
-                    alert(`恭喜！你完成了当前关卡，共移动 ${gameState.moves} 步，推动箱子 ${gameState.boxPushes} 次！`);
-                    generateNewLevel();
+                    // 判断是否为最优解
+                    if (gameState.boxPushes > gameState.minSolutionSteps && gameState.minSolutionSteps > 0) {
+                        // 不是最优解，弹窗选择
+                        const msg = `恭喜！你完成了当前关卡，共移动 ${gameState.moves} 步，推动箱子 ${gameState.boxPushes} 次！\n但你不是最优解（最少推动次数为${gameState.minSolutionSteps}），是否重新体验本关？`;
+                        if (confirm(msg + '\n点击"确定"重新体验，点击"取消"进入新关卡。')) {
+                            resetLevel();
+                        } else {
+                            generateNewLevel();
+                        }
+                    } else {
+                        // 最优解或无最优数据
+                        alert(`恭喜！你完成了当前关卡，共移动 ${gameState.moves} 步，推动箱子 ${gameState.boxPushes} 次！${gameState.minSolutionSteps > 0 ? '\n你已达到最优解！' : ''}`);
+                        generateNewLevel();
+                    }
                 } else {
                     // 恢复最终状态
                     renderGame();
@@ -357,20 +485,20 @@ function animateStep() {
 function createDefaultImages() {
     // 对象用于保存已创建的默认图像
     const defaultImages = {};
-    
+
     // 1. 创建箱子图像
     const boxCanvas = document.createElement('canvas');
     boxCanvas.width = config.tileSize;
     boxCanvas.height = config.tileSize;
     const boxCtx = boxCanvas.getContext('2d');
-    
+
     // 绘制木箱
     boxCtx.fillStyle = '#b97a57';  // 棕色
     boxCtx.fillRect(0, 0, config.tileSize, config.tileSize);
     // 绘制边框
     boxCtx.strokeStyle = '#5d3a1a';  // 深棕色
     boxCtx.lineWidth = 3;
-    boxCtx.strokeRect(3, 3, config.tileSize-6, config.tileSize-6);
+    boxCtx.strokeRect(3, 3, config.tileSize - 6, config.tileSize - 6);
     // 绘制木纹
     boxCtx.strokeStyle = '#8c5a3d';  // 中棕色
     boxCtx.lineWidth = 1;
@@ -380,58 +508,58 @@ function createDefaultImages() {
         boxCtx.lineTo(config.tileSize, i);
         boxCtx.stroke();
     }
-    
+
     defaultImages.box = boxCanvas.toDataURL();
-    
+
     // 1.1 创建箱子在目标点上的图像
     const boxAidCanvas = document.createElement('canvas');
     boxAidCanvas.width = config.tileSize;
     boxAidCanvas.height = config.tileSize;
     const boxAidCtx = boxAidCanvas.getContext('2d');
-    
+
     // 绘制彩色箱子（在目标点上）
     boxAidCtx.fillStyle = '#5cb85c';  // 绿色
     boxAidCtx.fillRect(0, 0, config.tileSize, config.tileSize);
     // 绘制边框
     boxAidCtx.strokeStyle = '#2d682d';  // 深绿色
     boxAidCtx.lineWidth = 3;
-    boxAidCtx.strokeRect(3, 3, config.tileSize-6, config.tileSize-6);
+    boxAidCtx.strokeRect(3, 3, config.tileSize - 6, config.tileSize - 6);
     // 绘制图案
     boxAidCtx.strokeStyle = '#fff';  // 白色
     boxAidCtx.lineWidth = 2;
     // 绘制对勾
     boxAidCtx.beginPath();
-    boxAidCtx.moveTo(config.tileSize*0.25, config.tileSize*0.5);
-    boxAidCtx.lineTo(config.tileSize*0.45, config.tileSize*0.7);
-    boxAidCtx.lineTo(config.tileSize*0.75, config.tileSize*0.3);
+    boxAidCtx.moveTo(config.tileSize * 0.25, config.tileSize * 0.5);
+    boxAidCtx.lineTo(config.tileSize * 0.45, config.tileSize * 0.7);
+    boxAidCtx.lineTo(config.tileSize * 0.75, config.tileSize * 0.3);
     boxAidCtx.stroke();
-    
+
     defaultImages.boxAid = boxAidCanvas.toDataURL();
-    
+
     // 2. 创建目标点图像
     const targetCanvas = document.createElement('canvas');
     targetCanvas.width = config.tileSize;
     targetCanvas.height = config.tileSize;
     const targetCtx = targetCanvas.getContext('2d');
-    
+
     // 绘制基础地板
     targetCtx.fillStyle = '#eee';
     targetCtx.fillRect(0, 0, config.tileSize, config.tileSize);
-    
+
     // 绘制十字标记
     targetCtx.fillStyle = '#f00';  // 红色
     targetCtx.beginPath();
     // 绘制圆圈
-    targetCtx.arc(config.tileSize/2, config.tileSize/2, config.tileSize/3, 0, Math.PI*2);
+    targetCtx.arc(config.tileSize / 2, config.tileSize / 2, config.tileSize / 3, 0, Math.PI * 2);
     targetCtx.fill();
     // 绘制白色内圈
     targetCtx.fillStyle = '#fff';
     targetCtx.beginPath();
-    targetCtx.arc(config.tileSize/2, config.tileSize/2, config.tileSize/5, 0, Math.PI*2);
+    targetCtx.arc(config.tileSize / 2, config.tileSize / 2, config.tileSize / 5, 0, Math.PI * 2);
     targetCtx.fill();
-    
+
     defaultImages.target = targetCanvas.toDataURL();
-    
+
     return defaultImages;
 }
 
@@ -488,9 +616,9 @@ async function loadImages() {
                     tempCanvas.width = config.tileSize;
                     tempCanvas.height = config.tileSize;
                     const tempCtx = tempCanvas.getContext('2d');
-                    
+
                     // 根据不同类型绘制不同的替代图形
-                    switch(name) {
+                    switch (name) {
                         case 'wall':
                             tempCtx.fillStyle = '#888';
                             tempCtx.fillRect(0, 0, config.tileSize, config.tileSize);
@@ -504,31 +632,31 @@ async function loadImages() {
                             tempCtx.fillRect(0, 0, config.tileSize, config.tileSize);
                             tempCtx.strokeStyle = '#000';
                             tempCtx.lineWidth = 2;
-                            tempCtx.strokeRect(2, 2, config.tileSize-4, config.tileSize-4);
+                            tempCtx.strokeRect(2, 2, config.tileSize - 4, config.tileSize - 4);
                             break;
                         case 'boxAid':
                             tempCtx.fillStyle = '#5cb85c';
                             tempCtx.fillRect(0, 0, config.tileSize, config.tileSize);
                             tempCtx.strokeStyle = '#fff';
                             tempCtx.lineWidth = 2;
-                            tempCtx.strokeRect(2, 2, config.tileSize-4, config.tileSize-4);
+                            tempCtx.strokeRect(2, 2, config.tileSize - 4, config.tileSize - 4);
                             break;
                         case 'target':
                             tempCtx.fillStyle = '#eee';
                             tempCtx.fillRect(0, 0, config.tileSize, config.tileSize);
                             tempCtx.fillStyle = '#f00';
                             tempCtx.beginPath();
-                            tempCtx.arc(config.tileSize/2, config.tileSize/2, config.tileSize/4, 0, Math.PI*2);
+                            tempCtx.arc(config.tileSize / 2, config.tileSize / 2, config.tileSize / 4, 0, Math.PI * 2);
                             tempCtx.fill();
                             break;
                     }
-                    
+
                     // 使用canvas作为图像源
                     images[name].src = tempCanvas.toDataURL();
                 }
                 resolve();
             };
-            
+
             // 设置图片源路径，特别处理 boxAid
             if (name === 'boxAid') {
                 images[name].src = `img/Box_Aid.png`; // 尝试加载Box_Aid.png
@@ -555,47 +683,66 @@ function initCanvas() {
         console.error('找不到Canvas元素!');
         return false;
     }
-    
+
     ctx = canvas.getContext('2d');
     if (!ctx) {
         console.error('无法获取Canvas上下文!');
         return false;
     }
-    
+
     // 设置canvas大小
     config.canvasWidth = config.boardSize.width * config.tileSize;
     config.canvasHeight = config.boardSize.height * config.tileSize;
-    
+
     canvas.width = config.canvasWidth;
     canvas.height = config.canvasHeight;
-    
+
     // 设置游戏容器大小
     const container = document.getElementById('game-container');
     if (container) {
         container.style.width = `${config.canvasWidth}px`;
         container.style.height = `${config.canvasHeight}px`;
     }
-    
+
     return true;
 }
 
-// 渲染游戏
+// 在canvas下方显示当前已推动次数
+function updatePushCountDisplay() {
+    let pushInfo = document.getElementById('push-info');
+    if (!pushInfo) {
+        // 如果没有则创建
+        pushInfo = document.createElement('div');
+        pushInfo.id = 'push-info';
+        pushInfo.style.marginTop = '10px';
+        pushInfo.style.fontSize = '1.1em';
+        pushInfo.style.color = '#333';
+        // 插入到canvas下方
+        const container = document.getElementById('game-container');
+        if (container && container.parentNode) {
+            container.parentNode.insertBefore(pushInfo, container.nextSibling);
+        }
+    }
+    pushInfo.textContent = `当前已推动箱子次数：${gameState.boxPushes}`;
+}
+
+// 修改renderGame，在每次渲染后调用
 function renderGame() {
     // 检查ctx是否有效
     if (!ctx) {
         console.error('无法渲染游戏：Canvas上下文不可用');
         return;
     }
-    
+
     // 清除画布
     ctx.clearRect(0, 0, config.canvasWidth, config.canvasHeight);
-    
+
     // 首先绘制所有格子的地板
     for (let y = 0; y < config.boardSize.height; y++) {
         for (let x = 0; x < config.boardSize.width; x++) {
             const posX = x * config.tileSize;
             const posY = y * config.tileSize;
-            
+
             // 绘制地面
             if (images.floor && images.floor.complete && images.floor.naturalWidth !== 0) {
                 ctx.drawImage(images.floor, posX, posY, config.tileSize, config.tileSize);
@@ -606,14 +753,14 @@ function renderGame() {
             }
         }
     }
-    
+
     // 渲染墙壁
     for (let y = 0; y < config.boardSize.height; y++) {
         for (let x = 0; x < config.boardSize.width; x++) {
             if (gameState.board[y][x] === 'wall') {
                 const posX = x * config.tileSize;
                 const posY = y * config.tileSize;
-                
+
                 if (images.wall && images.wall.complete && images.wall.naturalWidth !== 0) {
                     ctx.drawImage(images.wall, posX, posY, config.tileSize, config.tileSize);
                 } else {
@@ -624,34 +771,34 @@ function renderGame() {
             }
         }
     }
-    
+
     // 渲染目标点
     gameState.targets.forEach(target => {
         const posX = target.x * config.tileSize;
         const posY = target.y * config.tileSize;
-        
+
         if (images.target && images.target.complete && images.target.naturalWidth !== 0) {
             ctx.drawImage(images.target, posX, posY, config.tileSize, config.tileSize);
         } else {
             // 如果图片加载失败，使用简单的图形
             ctx.fillStyle = '#f00';
             ctx.beginPath();
-            ctx.arc(posX + config.tileSize/2, posY + config.tileSize/2, config.tileSize/4, 0, Math.PI*2);
+            ctx.arc(posX + config.tileSize / 2, posY + config.tileSize / 2, config.tileSize / 4, 0, Math.PI * 2);
             ctx.fill();
         }
     });
-    
+
     // 渲染箱子
     gameState.boxes.forEach(box => {
         const posX = box.x * config.tileSize;
         const posY = box.y * config.tileSize;
-        
+
         // 检查箱子是否在目标点上
-        const isOnTarget = gameState.targets.some(target => 
-            Math.round(target.x) === Math.round(box.x) && 
+        const isOnTarget = gameState.targets.some(target =>
+            Math.round(target.x) === Math.round(box.x) &&
             Math.round(target.y) === Math.round(box.y)
         );
-        
+
         // 根据箱子是否在目标点上选择不同的图像
         if (isOnTarget) {
             // 箱子在目标点上
@@ -663,13 +810,13 @@ function renderGame() {
                 ctx.fillRect(posX, posY, config.tileSize, config.tileSize);
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 2;
-                ctx.strokeRect(posX + 2, posY + 2, config.tileSize-4, config.tileSize-4);
-                
+                ctx.strokeRect(posX + 2, posY + 2, config.tileSize - 4, config.tileSize - 4);
+
                 // 绘制对勾
                 ctx.beginPath();
-                ctx.moveTo(posX + config.tileSize*0.25, posY + config.tileSize*0.5);
-                ctx.lineTo(posX + config.tileSize*0.45, posY + config.tileSize*0.7);
-                ctx.lineTo(posX + config.tileSize*0.75, posY + config.tileSize*0.3);
+                ctx.moveTo(posX + config.tileSize * 0.25, posY + config.tileSize * 0.5);
+                ctx.lineTo(posX + config.tileSize * 0.45, posY + config.tileSize * 0.7);
+                ctx.lineTo(posX + config.tileSize * 0.75, posY + config.tileSize * 0.3);
                 ctx.stroke();
             }
         } else {
@@ -682,13 +829,15 @@ function renderGame() {
                 ctx.fillRect(posX, posY, config.tileSize, config.tileSize);
                 ctx.strokeStyle = '#000';
                 ctx.lineWidth = 2;
-                ctx.strokeRect(posX + 2, posY + 2, config.tileSize-4, config.tileSize-4);
+                ctx.strokeRect(posX + 2, posY + 2, config.tileSize - 4, config.tileSize - 4);
             }
         }
     });
-    
+
     // 渲染玩家
     renderPlayer();
+    // 新增：渲染后更新推动次数显示
+    updatePushCountDisplay();
 }
 
 // 渲染玩家
@@ -701,17 +850,17 @@ function renderPlayer() {
         else if (gameState.animationFrame === 1) frame = '01';
         else if (gameState.animationFrame === 2) frame = '02';
     }
-    
+
     const posX = gameState.playerPos.x * config.tileSize;
     const posY = gameState.playerPos.y * config.tileSize;
-    
+
     // 检查玩家图像是否存在
-    const playerImgLoaded = images.player && 
-                            images.player[gameState.playerDirection] && 
-                            images.player[gameState.playerDirection][frame] && 
-                            images.player[gameState.playerDirection][frame].complete && 
-                            images.player[gameState.playerDirection][frame].naturalWidth !== 0;
-    
+    const playerImgLoaded = images.player &&
+        images.player[gameState.playerDirection] &&
+        images.player[gameState.playerDirection][frame] &&
+        images.player[gameState.playerDirection][frame].complete &&
+        images.player[gameState.playerDirection][frame].naturalWidth !== 0;
+
     if (playerImgLoaded) {
         // 绘制玩家图片
         ctx.drawImage(images.player[gameState.playerDirection][frame], posX, posY, config.tileSize, config.tileSize);
@@ -720,7 +869,7 @@ function renderPlayer() {
         ctx.fillStyle = '#00f';
         ctx.fillRect(posX + 4, posY + 4, config.tileSize - 8, config.tileSize - 8);
         ctx.fillStyle = '#fff';
-        
+
         // 根据方向绘制不同的简单标记
         const center = config.tileSize / 2;
         ctx.beginPath();
@@ -775,17 +924,29 @@ document.addEventListener('keydown', (event) => {
 async function initGame() {
     // 初始化Canvas和上下文
     const canvasInitialized = initCanvas();
-    
+
     if (!canvasInitialized) {
         displayErrorMessage('游戏初始化失败：无法找到或初始化Canvas元素');
         return;
     }
-    
+
+    // 加载AI关卡生成器模块
+    try {
+        if (config.useAIGeneration && !AILevelGenerator) {
+            const aiModule = await import('./js/AILevelGenerator.js');
+            AILevelGenerator = aiModule.AILevelGenerator;
+        }
+    } catch (error) {
+        console.error('AI关卡生成器加载失败:', error);
+        config.useAIGeneration = false; // 禁用AI生成关卡
+    }
+
     // 加载图片
     const imagesLoaded = await loadImages();
     if (imagesLoaded) {
-        generateNewLevel();
-        
+        // 生成新关卡
+        await generateNewLevel();
+
         // 将游戏状态预渲染到屏幕上 - 开始游戏循环
         window.requestAnimationFrame(gameLoop);
     } else {
@@ -799,12 +960,12 @@ function displayErrorMessage(message) {
     if (errorElement) {
         errorElement.style.display = 'block';
         errorElement.innerHTML = message + ' <button id="retry-btn">重试</button>';
-        
+
         // 添加重试按钮事件
         setTimeout(() => {
             const retryBtn = document.getElementById('retry-btn');
             if (retryBtn) {
-                retryBtn.addEventListener('click', function() {
+                retryBtn.addEventListener('click', function () {
                     errorElement.style.display = 'none';
                     initGame();
                 });
@@ -819,7 +980,7 @@ function displayErrorMessage(message) {
 function gameLoop(timestamp) {
     // 渲染游戏
     renderGame();
-    
+
     // 继续请求下一帧
     window.requestAnimationFrame(gameLoop);
 }
@@ -837,3 +998,5 @@ if (document.readyState === 'loading') {
 
 // 暴露撤销函数给全局，以便HTML按钮可以调用
 window.undoMove = undoMove;
+window.resetLevel = resetLevel;
+window.generateNewLevel = generateNewLevel;
