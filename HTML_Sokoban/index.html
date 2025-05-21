@@ -3,87 +3,107 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>AI生成推箱子关卡</title>
     <style>
         body {
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            height: 100vh;
+            justify-content: flex-start;
+            min-height: 100vh;
             margin: 0;
+            padding: 10px;
             background-color: #f0f0f0;
             font-family: Arial, sans-serif;
+            box-sizing: border-box;
+            overflow-x: hidden;
         }
 
         h1 {
             color: #333;
-            margin-bottom: 20px;
+            margin: 10px 0;
+            font-size: 1.5em;
+            text-align: center;
         }
 
         #game-container {
             position: relative;
             border: 2px solid #333;
+            max-width: 100%;
+            max-height: 70vh;
+            margin: 10px auto;
         }
 
         #game-canvas {
             display: block;
+            max-width: 100%;
+            height: auto;
         }
 
         .controls {
-            margin-top: 20px;
-            display: flex;
-            flex-direction: row;
-            align-items: center;
-            justify-content: center;
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
             width: 100%;
+            max-width: 400px;
+            padding: 0 10px;
+            box-sizing: border-box;
         }
 
         button {
-            margin: 0 10px;
-            padding: 8px 16px;
+            padding: 12px 16px;
             background-color: #4CAF50;
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 8px;
             cursor: pointer;
-            min-width: 100px;
+            font-size: 16px;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
 
-        button:hover {
+        button:active {
             background-color: #45a049;
+            transform: scale(0.98);
         }
 
         .instructions {
-            margin-top: 20px;
-            max-width: 600px;
+            margin: 10px;
+            max-width: 100%;
             text-align: center;
+            font-size: 0.9em;
+            padding: 0 10px;
         }
 
         #error-message {
             display: none;
             color: red;
             font-weight: bold;
-            margin: 20px;
+            margin: 10px;
             padding: 10px;
             border: 1px solid red;
             background-color: #ffe6e6;
-            max-width: 600px;
+            max-width: 100%;
             text-align: center;
+            box-sizing: border-box;
         }
 
         #loading-message {
             color: #333;
             font-weight: bold;
-            margin: 20px;
+            margin: 10px;
             padding: 10px;
+            text-align: center;
         }
 
         #ai-info {
-            margin-top: 10px;
+            margin: 10px;
             color: #666;
-            font-size: 0.9em;
+            font-size: 0.85em;
+            text-align: center;
+            padding: 0 10px;
         }
 
         .ai-badge {
@@ -95,6 +115,251 @@
             margin-left: 5px;
             font-size: 0.8em;
         }
+
+        /* 触摸控制区域样式 */
+        #touch-controls {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 180px;
+            height: 180px;
+            z-index: 1000;
+        }
+
+        .touch-btn {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            -webkit-user-select: none;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+
+        .touch-btn:active {
+            opacity: 1;
+            transform: scale(0.95);
+        }
+
+        #touch-up {
+            top: 0;
+            left: 60px;
+            background-image: url('img/w.png');
+        }
+
+        #touch-down {
+            bottom: 0;
+            left: 60px;
+            background-image: url('img/s.png');
+        }
+
+        #touch-left {
+            top: 60px;
+            left: 0;
+            background-image: url('img/a.png');
+        }
+
+        #touch-right {
+            top: 60px;
+            right: 0;
+            background-image: url('img/d.png');
+        }
+
+        /* 设置按钮样式 - 修改为图标 */
+        #settings-btn {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            width: 40px;
+            height: 40px;
+            background-color: rgba(52, 152, 219, 0.8);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            padding: 0;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        #settings-btn:active {
+            background-color: rgba(41, 128, 185, 0.9);
+            transform: scale(0.95);
+        }
+
+        #settings-btn svg {
+            width: 24px;
+            height: 24px;
+            fill: white;
+        }
+
+        /* 设置模态框样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 1001;
+        }
+
+        .modal-content {
+            background-color: #f8f8f8;
+            margin: 10% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.5em;
+            color: #333;
+        }
+
+        .close-btn {
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #777;
+        }
+
+        .close-btn:hover {
+            color: #333;
+        }
+
+        .setting-group {
+            margin-bottom: 15px;
+        }
+
+        .setting-label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #555;
+        }
+
+        .setting-item {
+            margin-bottom: 10px;
+        }
+
+        .setting-description {
+            font-size: 0.85em;
+            color: #777;
+            margin-top: 3px;
+        }
+
+        .setting-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .range-container {
+            display: flex;
+            align-items: center;
+        }
+
+        .range-input {
+            flex: 1;
+            margin-right: 10px;
+        }
+
+        .range-value {
+            width: 50px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .modal-footer {
+            text-align: right;
+            border-top: 1px solid #ddd;
+            padding-top: 15px;
+            margin-top: 15px;
+        }
+
+        .btn-save {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .btn-save:hover {
+            background-color: #45a049;
+        }
+
+        .btn-reset {
+            background-color: #f44336;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+
+        .btn-reset:hover {
+            background-color: #d32f2f;
+        }
+
+        @media (max-width: 600px) {
+            #touch-controls {
+                display: block;
+            }
+
+            .instructions p:first-child {
+                display: none;
+            }
+
+            body {
+                padding-bottom: 220px;
+            }
+        }
+
+        @media (max-width: 400px) {
+            h1 {
+                font-size: 1.2em;
+            }
+
+            button {
+                font-size: 14px;
+                padding: 10px;
+            }
+
+            .controls {
+                gap: 5px;
+            }
+        }
     </style>
 </head>
 
@@ -103,6 +368,14 @@
 
     <div id="error-message"></div>
     <div id="loading-message">正在加载游戏资源...</div>
+
+    <!-- 设置图标按钮 -->
+    <button id="settings-btn" onclick="openSettings()">
+        <svg viewBox="0 0 24 24">
+            <path
+                d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z" />
+        </svg>
+    </button>
 
     <div id="game-container">
         <canvas id="game-canvas"></canvas>
@@ -121,6 +394,90 @@
         <p>使用方向键或WASD键移动玩家，将所有箱子推到目标点上即可完成关卡。</p>
         <p>按Z键或回退键可以撤销上一步。</p>
         <p><span class="ai-badge">AI</span> 关卡由AI算法自动生成，保证有解且具有一定难度。</p>
+    </div>
+
+    <!-- 触摸控制区域 -->
+    <div id="touch-controls">
+        <div class="touch-btn" id="touch-up"></div>
+        <div class="touch-btn" id="touch-down"></div>
+        <div class="touch-btn" id="touch-left"></div>
+        <div class="touch-btn" id="touch-right"></div>
+    </div>
+
+    <!-- 设置模态框 -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>游戏设置</h2>
+                <span class="close-btn" onclick="closeSettings()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <div class="setting-label">关卡尺寸</div>
+                    <div class="setting-item">
+                        <div class="range-container">
+                            <input type="range" id="board-size-range" class="range-input setting-input" min="6" max="11"
+                                step="1" value="10">
+                            <span id="board-size-value" class="range-value">10×10</span>
+                        </div>
+                        <div class="setting-description">设置关卡的宽度和高度（6×6到11×11）</div>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <div class="setting-label">AI生成参数</div>
+                    <div class="setting-item">
+                        <div class="setting-label">最大生成迭代次数</div>
+                        <div class="range-container">
+                            <input type="range" id="max-tries-range" class="range-input setting-input" min="10"
+                                max="100" step="5" value="100">
+                            <span id="max-tries-value" class="range-value">100</span>
+                        </div>
+                        <div class="setting-description">设置AI生成关卡的最大尝试次数（10-100），越大生成的关卡平均来说可能更难</div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-label">求解器最大迭代次数</div>
+                        <div class="range-container">
+                            <input type="range" id="max-iterations-range" class="range-input setting-input" min="1000"
+                                max="10000" step="500" value="5000">
+                            <span id="max-iterations-value" class="range-value">5000</span>
+                        </div>
+                        <div class="setting-description">设置求解器的最大迭代次数（1000-10000）</div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-label">求解器最大内存节点数</div>
+                        <div class="range-container">
+                            <input type="range" id="max-nodes-range" class="range-input setting-input" min="5000"
+                                max="30000" step="1000" value="15000">
+                            <span id="max-nodes-value" class="range-value">15000</span>
+                        </div>
+                        <div class="setting-description">设置求解器的最大内存节点数（5000-30000）</div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-label">墙壁生成概率</div>
+                        <div class="range-container">
+                            <input type="range" id="wall-prob-range" class="range-input setting-input" min="0.1"
+                                max="0.7" step="0.05" value="0.4">
+                            <span id="wall-prob-value" class="range-value">0.4</span>
+                        </div>
+                        <div class="setting-description">设置生成墙壁的概率（0.1-0.7），越高关卡越复杂</div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-label">箱子生成概率</div>
+                        <div class="range-container">
+                            <input type="range" id="box-prob-range" class="range-input setting-input" min="0.1"
+                                max="0.5" step="0.05" value="0.2">
+                            <span id="box-prob-value" class="range-value">0.2</span>
+                        </div>
+                        <div class="setting-description">设置生成箱子和目标点的概率（0.1-0.5），影响关卡平衡性</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-reset" onclick="resetSettings()">重置默认</button>
+                <button class="btn-save" onclick="saveSettings()">保存</button>
+            </div>
+        </div>
     </div>
 
     <!-- 创建js目录以存放模块文件 -->

@@ -13,6 +13,17 @@ const config = {
     aiTimeout: 8000 // AI生成超时时间（毫秒）
 };
 
+// 默认设置，用于重置
+const defaultSettings = {
+    boardSize: { width: 10, height: 10 },
+    aiGenerationMaxTries: 100,
+    maxSolverIterations: 5000,
+    maxNodesInMemory: 15000,
+    aiTimeout: 8000,
+    wallProbability: 0.4,
+    boxProbability: 0.2
+};
+
 // 游戏状态
 let gameState = {
     board: [],
@@ -154,8 +165,18 @@ async function generateNewLevel() {
         try {
             updateGenerationProgress({ iteration: 0, maxTries: config.aiGenerationMaxTries, progress: 0 });
 
-            const generator = new AILevelGenerator(config.boardSize.width, config.boardSize.height);
-            generator.maxGenerationTime = config.aiTimeout - 1000; // 给主流程留出1秒钟冗余
+            // 创建生成器实例时传递所有参数
+            const generator = new AILevelGenerator(
+                config.boardSize.width,
+                config.boardSize.height,
+                {
+                    maxSolverIterations: defaultSettings.maxSolverIterations,
+                    maxNodesInMemory: defaultSettings.maxNodesInMemory,
+                    maxGenerationTime: config.aiTimeout - 1000, // 给主流程留出1秒钟冗余
+                    wallProbability: defaultSettings.wallProbability, // 使用默认设置中的概率值
+                    boxProbability: defaultSettings.boxProbability  // 使用默认设置中的概率值
+                }
+            );
 
             // 竞争超时和正常结果
             const result = await Promise.race([
@@ -700,237 +721,339 @@ function initCanvas() {
         return false;
     }
 
-    // 设置canvas大小
-    config.canvasWidth = config.boardSize.width * config.tileSize;
-    config.canvasHeight = config.boardSize.height * config.tileSize;
-
-    canvas.width = config.canvasWidth;
-    canvas.height = config.canvasHeight;
-
-    // 设置游戏容器大小
+    // 计算适合屏幕的画布大小
     const container = document.getElementById('game-container');
     if (container) {
+        // 获取可用屏幕宽度（考虑边距）
+        const availableWidth = Math.min(window.innerWidth - 40, 600);
+
+        // 计算合适的瓦片大小，考虑边界（最小和最大尺寸）
+        let tileSize = Math.floor(availableWidth / config.boardSize.width);
+
+        // 确保瓦片大小不要太小
+        const minTileSize = 20; // 最小瓦片大小
+        const maxTileSize = 60; // 最大瓦片大小
+
+        tileSize = Math.max(minTileSize, Math.min(maxTileSize, tileSize));
+
+        // 更新配置
+        config.tileSize = tileSize;
+        config.canvasWidth = config.boardSize.width * tileSize;
+        config.canvasHeight = config.boardSize.height * tileSize;
+
+        // 设置画布大小
+        canvas.width = config.canvasWidth;
+        canvas.height = config.canvasHeight;
+
+        // 设置容器大小
         container.style.width = `${config.canvasWidth}px`;
         container.style.height = `${config.canvasHeight}px`;
+
+        console.log(`画布已调整为 ${config.canvasWidth}x${config.canvasHeight}, 瓦片大小: ${tileSize}px`);
     }
 
     return true;
 }
 
-// 在canvas下方显示当前已推动次数
-function updatePushCountDisplay() {
-    let pushInfo = document.getElementById('push-info');
-    if (!pushInfo) {
-        // 如果没有则创建
-        pushInfo = document.createElement('div');
-        pushInfo.id = 'push-info';
-        pushInfo.style.marginTop = '10px';
-        pushInfo.style.fontSize = '1.1em';
-        pushInfo.style.color = '#333';
-        // 插入到canvas下方
-        const container = document.getElementById('game-container');
-        if (container && container.parentNode) {
-            container.parentNode.insertBefore(pushInfo, container.nextSibling);
-        }
+// 添加触摸控制支持
+function initTouchControls() {
+    // 获取触摸按钮元素
+    const touchUp = document.getElementById('touch-up');
+    const touchDown = document.getElementById('touch-down');
+    const touchLeft = document.getElementById('touch-left');
+    const touchRight = document.getElementById('touch-right');
+
+    // 处理触摸事件的函数
+    function handleTouchStart(dx, dy) {
+        return function (event) {
+            event.preventDefault();
+            movePlayer(dx, dy);
+        };
     }
-    pushInfo.textContent = `当前已推动箱子次数：${gameState.boxPushes}`;
+
+    // 添加触摸事件监听器
+    if (touchUp) {
+        touchUp.addEventListener('touchstart', handleTouchStart(0, -1));
+    }
+    if (touchDown) {
+        touchDown.addEventListener('touchstart', handleTouchStart(0, 1));
+    }
+    if (touchLeft) {
+        touchLeft.addEventListener('touchstart', handleTouchStart(-1, 0));
+    }
+    if (touchRight) {
+        touchRight.addEventListener('touchstart', handleTouchStart(1, 0));
+    }
+
+    // 防止触摸控制时页面滚动
+    const touchControls = document.getElementById('touch-controls');
+    if (touchControls) {
+        touchControls.addEventListener('touchmove', function (event) {
+            event.preventDefault();
+        }, { passive: false });
+    }
 }
 
-// 修改renderGame，在每次渲染后调用
-function renderGame() {
-    // 检查ctx是否有效
-    if (!ctx) {
-        console.error('无法渲染游戏：Canvas上下文不可用');
-        return;
-    }
-
-    // 清除画布
-    ctx.clearRect(0, 0, config.canvasWidth, config.canvasHeight);
-
-    // 首先绘制所有格子的地板
-    for (let y = 0; y < config.boardSize.height; y++) {
-        for (let x = 0; x < config.boardSize.width; x++) {
-            const posX = x * config.tileSize;
-            const posY = y * config.tileSize;
-
-            // 绘制地面
-            if (images.floor && images.floor.complete && images.floor.naturalWidth !== 0) {
-                ctx.drawImage(images.floor, posX, posY, config.tileSize, config.tileSize);
-            } else {
-                // 如果图片加载失败，使用简单的矩形
-                ctx.fillStyle = '#eee';
-                ctx.fillRect(posX, posY, config.tileSize, config.tileSize);
-            }
-        }
-    }
-
-    // 渲染墙壁
-    for (let y = 0; y < config.boardSize.height; y++) {
-        for (let x = 0; x < config.boardSize.width; x++) {
-            if (gameState.board[y][x] === 'wall') {
-                const posX = x * config.tileSize;
-                const posY = y * config.tileSize;
-
-                if (images.wall && images.wall.complete && images.wall.naturalWidth !== 0) {
-                    ctx.drawImage(images.wall, posX, posY, config.tileSize, config.tileSize);
-                } else {
-                    // 如果图片加载失败，使用简单的矩形
-                    ctx.fillStyle = '#888';
-                    ctx.fillRect(posX, posY, config.tileSize, config.tileSize);
-                }
-            }
-        }
-    }
-
-    // 渲染目标点
-    gameState.targets.forEach(target => {
-        const posX = target.x * config.tileSize;
-        const posY = target.y * config.tileSize;
-
-        if (images.target && images.target.complete && images.target.naturalWidth !== 0) {
-            ctx.drawImage(images.target, posX, posY, config.tileSize, config.tileSize);
-        } else {
-            // 如果图片加载失败，使用简单的图形
-            ctx.fillStyle = '#f00';
-            ctx.beginPath();
-            ctx.arc(posX + config.tileSize / 2, posY + config.tileSize / 2, config.tileSize / 4, 0, Math.PI * 2);
-            ctx.fill();
-        }
+// 监听窗口大小变化
+window.addEventListener('resize', function () {
+    // 重新初始化画布大小
+    initCanvas();
+    // 重新加载图片以适应新的瓦片大小
+    loadImages().then(() => {
+        // 重新渲染游戏
+        renderGame();
     });
-
-    // 渲染箱子
-    gameState.boxes.forEach(box => {
-        const posX = box.x * config.tileSize;
-        const posY = box.y * config.tileSize;
-
-        // 检查箱子是否在目标点上
-        const isOnTarget = gameState.targets.some(target =>
-            Math.round(target.x) === Math.round(box.x) &&
-            Math.round(target.y) === Math.round(box.y)
-        );
-
-        // 根据箱子是否在目标点上选择不同的图像
-        if (isOnTarget) {
-            // 箱子在目标点上
-            if (images.boxAid && images.boxAid.complete && images.boxAid.naturalWidth !== 0) {
-                ctx.drawImage(images.boxAid, posX, posY, config.tileSize, config.tileSize);
-            } else {
-                // 如果图片加载失败，使用简单的绿色矩形表示箱子在目标点上
-                ctx.fillStyle = '#5cb85c';  // 绿色
-                ctx.fillRect(posX, posY, config.tileSize, config.tileSize);
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(posX + 2, posY + 2, config.tileSize - 4, config.tileSize - 4);
-
-                // 绘制对勾
-                ctx.beginPath();
-                ctx.moveTo(posX + config.tileSize * 0.25, posY + config.tileSize * 0.5);
-                ctx.lineTo(posX + config.tileSize * 0.45, posY + config.tileSize * 0.7);
-                ctx.lineTo(posX + config.tileSize * 0.75, posY + config.tileSize * 0.3);
-                ctx.stroke();
-            }
-        } else {
-            // 普通箱子
-            if (images.box && images.box.complete && images.box.naturalWidth !== 0) {
-                ctx.drawImage(images.box, posX, posY, config.tileSize, config.tileSize);
-            } else {
-                // 如果图片加载失败，使用简单的矩形
-                ctx.fillStyle = '#b97a57';
-                ctx.fillRect(posX, posY, config.tileSize, config.tileSize);
-                ctx.strokeStyle = '#000';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(posX + 2, posY + 2, config.tileSize - 4, config.tileSize - 4);
-            }
-        }
-    });
-
-    // 渲染玩家
-    renderPlayer();
-    // 新增：渲染后更新推动次数显示
-    updatePushCountDisplay();
-}
-
-// 渲染玩家
-function renderPlayer() {
-    // 选择合适的玩家图片
-    let frame = '00';
-    if (gameState.isMoving) {
-        // 动画帧直接映射
-        if (gameState.animationFrame === 0) frame = '00';
-        else if (gameState.animationFrame === 1) frame = '01';
-        else if (gameState.animationFrame === 2) frame = '02';
-    }
-
-    const posX = gameState.playerPos.x * config.tileSize;
-    const posY = gameState.playerPos.y * config.tileSize;
-
-    // 检查玩家图像是否存在
-    const playerImgLoaded = images.player &&
-        images.player[gameState.playerDirection] &&
-        images.player[gameState.playerDirection][frame] &&
-        images.player[gameState.playerDirection][frame].complete &&
-        images.player[gameState.playerDirection][frame].naturalWidth !== 0;
-
-    if (playerImgLoaded) {
-        // 绘制玩家图片
-        ctx.drawImage(images.player[gameState.playerDirection][frame], posX, posY, config.tileSize, config.tileSize);
-    } else {
-        // 如果图片没有加载成功，使用简单的形状代替
-        ctx.fillStyle = '#00f';
-        ctx.fillRect(posX + 4, posY + 4, config.tileSize - 8, config.tileSize - 8);
-        ctx.fillStyle = '#fff';
-
-        // 根据方向绘制不同的简单标记
-        const center = config.tileSize / 2;
-        ctx.beginPath();
-        if (gameState.playerDirection === 'u') {
-            ctx.moveTo(posX + center, posY + 8);
-            ctx.lineTo(posX + center - 6, posY + center);
-            ctx.lineTo(posX + center + 6, posY + center);
-        } else if (gameState.playerDirection === 'd') {
-            ctx.moveTo(posX + center, posY + config.tileSize - 8);
-            ctx.lineTo(posX + center - 6, posY + center);
-            ctx.lineTo(posX + center + 6, posY + center);
-        } else if (gameState.playerDirection === 'l') {
-            ctx.moveTo(posX + 8, posY + center);
-            ctx.lineTo(posX + center, posY + center - 6);
-            ctx.lineTo(posX + center, posY + center + 6);
-        } else if (gameState.playerDirection === 'r') {
-            ctx.moveTo(posX + config.tileSize - 8, posY + center);
-            ctx.lineTo(posX + center, posY + center - 6);
-            ctx.lineTo(posX + center, posY + center + 6);
-        }
-        ctx.fill();
-    }
-}
-
-// 监听键盘事件
-document.addEventListener('keydown', (event) => {
-    switch (event.key.toLowerCase()) {
-        case 'arrowleft':
-        case 'a':
-            movePlayer(-1, 0);
-            break;
-        case 'arrowright':
-        case 'd':
-            movePlayer(1, 0);
-            break;
-        case 'arrowup':
-        case 'w':
-            movePlayer(0, -1);
-            break;
-        case 'arrowdown':
-        case 's':
-            movePlayer(0, 1);
-            break;
-        case 'z':
-        case 'backspace':
-            undoMove();
-            break;
-    }
 });
 
-// 初始化游戏
+// 设置模态框函数
+function openSettings() {
+    // 填充当前设置值
+    document.getElementById('board-size-range').value = config.boardSize.width;
+    document.getElementById('board-size-value').textContent = `${config.boardSize.width}×${config.boardSize.height}`;
+
+    document.getElementById('max-tries-range').value = config.aiGenerationMaxTries;
+    document.getElementById('max-tries-value').textContent = config.aiGenerationMaxTries;
+
+    // 加载求解器设置
+    let maxIterationsValue = defaultSettings.maxSolverIterations;
+    let maxNodesValue = defaultSettings.maxNodesInMemory;
+
+    // 如果AILevelGenerator已加载，从实例中获取值
+    if (AILevelGenerator) {
+        try {
+            // 创建临时实例以获取默认值
+            const tempGenerator = new AILevelGenerator(config.boardSize.width, config.boardSize.height);
+            maxIterationsValue = tempGenerator.maxSolverIterations || defaultSettings.maxSolverIterations;
+
+            // 不再尝试创建Solver实例，直接使用存储的值或原型上的值
+            if (window.Solver) {
+                maxNodesValue = window.Solver.prototype.maxNodesInMemory || defaultSettings.maxNodesInMemory;
+            }
+        } catch (e) {
+            console.warn("无法获取当前求解器设置:", e);
+        }
+    }
+
+    document.getElementById('max-iterations-range').value = maxIterationsValue;
+    document.getElementById('max-iterations-value').textContent = maxIterationsValue;
+
+    document.getElementById('max-nodes-range').value = maxNodesValue;
+    document.getElementById('max-nodes-value').textContent = maxNodesValue;
+
+    // 设置概率滑块的初始值
+    document.getElementById('wall-prob-range').value = defaultSettings.wallProbability;
+    document.getElementById('wall-prob-value').textContent = defaultSettings.wallProbability.toFixed(2);
+
+    document.getElementById('box-prob-range').value = defaultSettings.boxProbability;
+    document.getElementById('box-prob-value').textContent = defaultSettings.boxProbability.toFixed(2);
+
+    // 显示模态框
+    document.getElementById('settings-modal').style.display = 'block';
+
+    // 添加实时更新显示值的事件监听
+    setupRangeListeners();
+}
+
+// 设置范围滑块的监听器
+function setupRangeListeners() {
+    // 关卡尺寸滑块
+    document.getElementById('board-size-range').addEventListener('input', function () {
+        const size = parseInt(this.value);
+        document.getElementById('board-size-value').textContent = `${size}×${size}`;
+    });
+
+    // 最大尝试次数滑块
+    document.getElementById('max-tries-range').addEventListener('input', function () {
+        document.getElementById('max-tries-value').textContent = this.value;
+    });
+
+    // 最大迭代次数滑块
+    document.getElementById('max-iterations-range').addEventListener('input', function () {
+        document.getElementById('max-iterations-value').textContent = this.value;
+    });
+
+    // 最大内存节点数滑块
+    document.getElementById('max-nodes-range').addEventListener('input', function () {
+        document.getElementById('max-nodes-value').textContent = this.value;
+    });
+
+    // 墙壁生成概率滑块
+    document.getElementById('wall-prob-range').addEventListener('input', function () {
+        document.getElementById('wall-prob-value').textContent = parseFloat(this.value).toFixed(2);
+    });
+
+    // 箱子生成概率滑块
+    document.getElementById('box-prob-range').addEventListener('input', function () {
+        document.getElementById('box-prob-value').textContent = parseFloat(this.value).toFixed(2);
+    });
+}
+
+// 保存设置
+function saveSettings() {
+    // 获取设置值
+    const boardSize = parseInt(document.getElementById('board-size-range').value);
+    const maxTries = parseInt(document.getElementById('max-tries-range').value);
+    const maxIterations = parseInt(document.getElementById('max-iterations-range').value);
+    const maxNodes = parseInt(document.getElementById('max-nodes-range').value);
+    const wallProb = parseFloat(document.getElementById('wall-prob-range').value);
+    const boxProb = parseFloat(document.getElementById('box-prob-range').value);
+
+    // 检查尺寸是否发生变化
+    const sizeChanged = config.boardSize.width !== boardSize || config.boardSize.height !== boardSize;
+
+    // 更新配置
+    config.boardSize = { width: boardSize, height: boardSize };
+    config.aiGenerationMaxTries = maxTries;
+
+    // 更新默认设置
+    defaultSettings.wallProbability = wallProb;
+    defaultSettings.boxProbability = boxProb;
+    defaultSettings.maxSolverIterations = maxIterations;
+    defaultSettings.maxNodesInMemory = maxNodes;
+
+    // 如果AILevelGenerator已加载，更新其设置
+    if (AILevelGenerator) {
+        try {
+            // 修改AILevelGenerator类的默认值
+            AILevelGenerator.prototype.maxSolverIterations = maxIterations;
+            AILevelGenerator.prototype.wallProbability = wallProb;
+            AILevelGenerator.prototype.boxProbability = boxProb;
+
+            // 如果可以访问Solver，更新其设置
+            if (window.Solver) {
+                window.Solver.prototype.maxNodesInMemory = maxNodes;
+            }
+        } catch (e) {
+            console.warn("无法更新求解器设置:", e);
+        }
+    }
+
+    // 保存设置到本地存储以供下次使用
+    try {
+        const settingsToSave = {
+            boardSize: config.boardSize,
+            aiGenerationMaxTries: config.aiGenerationMaxTries,
+            maxSolverIterations: maxIterations,
+            maxNodesInMemory: maxNodes,
+            wallProbability: wallProb,
+            boxProbability: boxProb
+        };
+        localStorage.setItem('sokobanSettings', JSON.stringify(settingsToSave));
+    } catch (e) {
+        console.warn("无法保存设置到本地存储:", e);
+    }
+
+    // 关闭设置模态框
+    closeSettings();
+
+    // 如果尺寸发生变化，重新初始化画布并生成新关卡
+    if (sizeChanged) {
+        // 重新初始化画布大小
+        initCanvas();
+
+        // 重新加载图片以适应新的瓦片大小
+        loadImages().then(() => {
+            // 生成新关卡
+            generateNewLevel();
+        });
+
+        // 提示用户设置已保存并应用
+        alert('关卡尺寸已修改，正在生成新关卡...');
+    } else {
+        // 提示用户设置已保存
+        alert('设置已保存，生成新关卡时将应用新设置');
+    }
+}
+
+// 重置设置为默认值
+function resetSettings() {
+    if (confirm('确定要将所有设置恢复为默认值吗？')) {
+        // 检查尺寸是否发生变化
+        const sizeChanged = config.boardSize.width !== defaultSettings.boardSize.width ||
+            config.boardSize.height !== defaultSettings.boardSize.height;
+
+        // 重置配置
+        config.boardSize = deepCopy(defaultSettings.boardSize);
+        config.aiGenerationMaxTries = defaultSettings.aiGenerationMaxTries;
+        config.aiTimeout = defaultSettings.aiTimeout;
+
+        // 重置求解器设置
+        if (AILevelGenerator) {
+            AILevelGenerator.prototype.maxSolverIterations = defaultSettings.maxSolverIterations;
+        }
+
+        if (window.Solver) {
+            window.Solver.prototype.maxNodesInMemory = defaultSettings.maxNodesInMemory;
+        }
+
+        // 删除本地存储中的设置
+        try {
+            localStorage.removeItem('sokobanSettings');
+        } catch (e) {
+            console.warn("无法删除本地存储中的设置:", e);
+        }
+
+        // 重新打开设置面板以显示默认值
+        openSettings();
+
+        // 如果尺寸发生变化，重新初始化画布并生成新关卡
+        if (sizeChanged) {
+            // 关闭设置模态框
+            closeSettings();
+
+            // 重新初始化画布大小
+            initCanvas();
+
+            // 重新加载图片以适应新的瓦片大小
+            loadImages().then(() => {
+                // 生成新关卡
+                generateNewLevel();
+            });
+
+            // 提示用户设置已重置并应用
+            alert('设置已重置为默认值，正在生成新关卡...');
+        }
+    }
+}
+
+// 从本地存储加载设置
+function loadSettings() {
+    try {
+        const savedSettings = localStorage.getItem('sokobanSettings');
+        if (savedSettings) {
+            const settings = JSON.parse(savedSettings);
+
+            // 更新配置
+            if (settings.boardSize) config.boardSize = settings.boardSize;
+            if (settings.aiGenerationMaxTries) config.aiGenerationMaxTries = settings.aiGenerationMaxTries;
+            if (settings.aiTimeout) config.aiTimeout = settings.aiTimeout;
+
+            // 保存求解器设置以便在加载时应用
+            if (settings.maxSolverIterations) defaultSettings.maxSolverIterations = settings.maxSolverIterations;
+            if (settings.maxNodesInMemory) defaultSettings.maxNodesInMemory = settings.maxNodesInMemory;
+            if (settings.wallProbability) defaultSettings.wallProbability = settings.wallProbability;
+            if (settings.boxProbability) defaultSettings.boxProbability = settings.boxProbability;
+
+            console.log('已从本地存储加载设置');
+        }
+    } catch (e) {
+        console.warn("无法从本地存储加载设置:", e);
+    }
+}
+
+// 在AI关卡生成器导入后应用求解器设置
+function applySettingsToSolver(solverModule) {
+    try {
+        if (solverModule && solverModule.Solver) {
+            solverModule.Solver.prototype.maxNodesInMemory = defaultSettings.maxNodesInMemory;
+            console.log('已应用求解器设置');
+        }
+    } catch (e) {
+        console.warn("无法应用求解器设置:", e);
+    }
+}
+
+// 修改初始化游戏函数，添加设置按钮事件和加载设置
 async function initGame() {
     // 初始化Canvas和上下文
     const canvasInitialized = initCanvas();
@@ -940,11 +1063,35 @@ async function initGame() {
         return;
     }
 
+    // 从本地存储加载设置
+    loadSettings();
+
+    // 初始化触摸控制
+    initTouchControls();
+
+    // 设置按钮和相关函数
+    window.openSettings = openSettings;
+    window.closeSettings = closeSettings;
+    window.saveSettings = saveSettings;
+    window.resetSettings = resetSettings;
+
     // 加载AI关卡生成器模块
     try {
         if (config.useAIGeneration && !AILevelGenerator) {
             const aiModule = await import('./js/AILevelGenerator.js');
             AILevelGenerator = aiModule.AILevelGenerator;
+
+            // 应用求解器设置到AILevelGenerator
+            AILevelGenerator.prototype.maxSolverIterations = defaultSettings.maxSolverIterations;
+
+            // 尝试导入并设置Solver模块
+            try {
+                const solverModule = await import('./js/Solver.js');
+                window.Solver = solverModule.Solver;
+                applySettingsToSolver(solverModule);
+            } catch (e) {
+                console.warn("无法导入Solver模块:", e);
+            }
         }
     } catch (error) {
         console.error('AI关卡生成器加载失败:', error);
@@ -1347,8 +1494,8 @@ function prepareAiDemoSteps(solution) {
 
         console.log('第' + i + '步状态:');
         var stateshow = "";
-        for(let j = 0; j < currentNode.currentstate.height; j++){
-            for(let k = 0; k < currentNode.currentstate.width; k++){
+        for (let j = 0; j < currentNode.currentstate.height; j++) {
+            for (let k = 0; k < currentNode.currentstate.width; k++) {
                 stateshow += currentNode.currentstate.tiles[j * currentNode.currentstate.width + k] + " ";
             }
             stateshow += "\n";
@@ -1370,10 +1517,10 @@ function prepareAiDemoSteps(solution) {
 
             // 检测箱子移动
             const movedBoxInfo = findMovedBox(prevNode.currentstate, currentNode.currentstate);
-            
+
             if (movedBoxInfo) {
                 const { prevPos, currentPos } = movedBoxInfo;
-                console.log("movedBoxInfo",prevPos,currentPos);
+                console.log("movedBoxInfo", prevPos, currentPos);
                 // 计算推箱子的方向
                 const dx = currentPos.x - prevPos.x;
                 const dy = currentPos.y - prevPos.y;
@@ -1529,17 +1676,17 @@ function findMovedBox(prevState, currentState) {
     // 找出哪个箱子被移动了
     const width = prevState.width;
     const height = prevState.height;
-    var prevBox = {x: -1, y: -1};
-    var currentBox = {x: -1, y: -1};
-    for(let i = 0; i < height; i++){
-        for(let j = 0; j < width; j++){
-            if(prevState.tiles[i * width + j] === 1 || prevState.tiles[i * width + j] === 2){
-                console.log("prevBox",j,i,prevState.tiles[i * width + j],currentState.tiles[i * width + j]);
+    var prevBox = { x: -1, y: -1 };
+    var currentBox = { x: -1, y: -1 };
+    for (let i = 0; i < height; i++) {
+        for (let j = 0; j < width; j++) {
+            if (prevState.tiles[i * width + j] === 1 || prevState.tiles[i * width + j] === 2) {
+                console.log("prevBox", j, i, prevState.tiles[i * width + j], currentState.tiles[i * width + j]);
                 // 目标点变为墙，即使不一样也不作为可移动的箱子
-                if(prevState.tiles[i * width + j] == 2 &&currentState.tiles[i * width + j] == 5){
+                if (prevState.tiles[i * width + j] == 2 && currentState.tiles[i * width + j] == 5) {
                     continue;
                 }
-                if(currentState.tiles[i * width + j] !== prevState.tiles[i * width + j]){
+                if (currentState.tiles[i * width + j] !== prevState.tiles[i * width + j]) {
                     prevBox.x = j;
                     prevBox.y = i;
                 }
@@ -1553,13 +1700,13 @@ function findMovedBox(prevState, currentState) {
     */
     var adjx = [prevBox.x, prevBox.x, prevBox.x + 1, prevBox.x - 1];
     var adjy = [prevBox.y + 1, prevBox.y - 1, prevBox.y, prevBox.y];
-    for(let i = 0; i < 4; i++){
-        if(adjx[i] < 0 || adjx[i] >= width || adjy[i] < 0 || adjy[i] >= height){
+    for (let i = 0; i < 4; i++) {
+        if (adjx[i] < 0 || adjx[i] >= width || adjy[i] < 0 || adjy[i] >= height) {
             continue;
         }
-        if(currentState.tiles[adjy[i] * width + adjx[i]] === 1 || currentState.tiles[adjy[i] * width + adjx[i]] === 2 || currentState.tiles[adjy[i] * width + adjx[i]] === 5){
-            console.log("currentBox",adjx[i],adjy[i],currentState.tiles[adjy[i] * width + adjx[i]],prevState.tiles[adjy[i] * width + adjx[i]]);
-            if(currentState.tiles[adjy[i] * width + adjx[i]] !== prevState.tiles[adjy[i] * width + adjx[i]]){
+        if (currentState.tiles[adjy[i] * width + adjx[i]] === 1 || currentState.tiles[adjy[i] * width + adjx[i]] === 2 || currentState.tiles[adjy[i] * width + adjx[i]] === 5) {
+            console.log("currentBox", adjx[i], adjy[i], currentState.tiles[adjy[i] * width + adjx[i]], prevState.tiles[adjy[i] * width + adjx[i]]);
+            if (currentState.tiles[adjy[i] * width + adjx[i]] !== prevState.tiles[adjy[i] * width + adjx[i]]) {
                 currentBox.x = adjx[i];
                 currentBox.y = adjy[i];
                 break;
@@ -1743,4 +1890,222 @@ function reconstructPath(prev, startX, startY, targetX, targetY) {
     path.unshift({ x: startX, y: startY });
 
     return path;
+}
+
+// 在canvas下方显示当前已推动次数
+function updatePushCountDisplay() {
+    let pushInfo = document.getElementById('push-info');
+    if (!pushInfo) {
+        // 如果没有则创建
+        pushInfo = document.createElement('div');
+        pushInfo.id = 'push-info';
+        pushInfo.style.marginTop = '10px';
+        pushInfo.style.fontSize = '1.1em';
+        pushInfo.style.color = '#333';
+        // 插入到canvas下方
+        const container = document.getElementById('game-container');
+        if (container && container.parentNode) {
+            container.parentNode.insertBefore(pushInfo, container.nextSibling);
+        }
+    }
+    pushInfo.textContent = `当前已推动箱子次数：${gameState.boxPushes}`;
+}
+
+// 渲染游戏
+function renderGame() {
+    // 检查ctx是否有效
+    if (!ctx) {
+        console.error('无法渲染游戏：Canvas上下文不可用');
+        return;
+    }
+
+    // 清除画布
+    ctx.clearRect(0, 0, config.canvasWidth, config.canvasHeight);
+
+    // 首先绘制所有格子的地板
+    for (let y = 0; y < config.boardSize.height; y++) {
+        for (let x = 0; x < config.boardSize.width; x++) {
+            const posX = x * config.tileSize;
+            const posY = y * config.tileSize;
+
+            // 绘制地面
+            if (images.floor && images.floor.complete && images.floor.naturalWidth !== 0) {
+                ctx.drawImage(images.floor, posX, posY, config.tileSize, config.tileSize);
+            } else {
+                // 如果图片加载失败，使用简单的矩形
+                ctx.fillStyle = '#eee';
+                ctx.fillRect(posX, posY, config.tileSize, config.tileSize);
+            }
+        }
+    }
+
+    // 渲染墙壁
+    for (let y = 0; y < config.boardSize.height; y++) {
+        for (let x = 0; x < config.boardSize.width; x++) {
+            if (gameState.board[y][x] === 'wall') {
+                const posX = x * config.tileSize;
+                const posY = y * config.tileSize;
+
+                if (images.wall && images.wall.complete && images.wall.naturalWidth !== 0) {
+                    ctx.drawImage(images.wall, posX, posY, config.tileSize, config.tileSize);
+                } else {
+                    // 如果图片加载失败，使用简单的矩形
+                    ctx.fillStyle = '#888';
+                    ctx.fillRect(posX, posY, config.tileSize, config.tileSize);
+                }
+            }
+        }
+    }
+
+    // 渲染目标点
+    gameState.targets.forEach(target => {
+        const posX = target.x * config.tileSize;
+        const posY = target.y * config.tileSize;
+
+        if (images.target && images.target.complete && images.target.naturalWidth !== 0) {
+            ctx.drawImage(images.target, posX, posY, config.tileSize, config.tileSize);
+        } else {
+            // 如果图片加载失败，使用简单的图形
+            ctx.fillStyle = '#f00';
+            ctx.beginPath();
+            ctx.arc(posX + config.tileSize / 2, posY + config.tileSize / 2, config.tileSize / 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    });
+
+    // 渲染箱子
+    gameState.boxes.forEach(box => {
+        const posX = box.x * config.tileSize;
+        const posY = box.y * config.tileSize;
+
+        // 检查箱子是否在目标点上
+        const isOnTarget = gameState.targets.some(target =>
+            Math.round(target.x) === Math.round(box.x) &&
+            Math.round(target.y) === Math.round(box.y)
+        );
+
+        // 根据箱子是否在目标点上选择不同的图像
+        if (isOnTarget) {
+            // 箱子在目标点上
+            if (images.boxAid && images.boxAid.complete && images.boxAid.naturalWidth !== 0) {
+                ctx.drawImage(images.boxAid, posX, posY, config.tileSize, config.tileSize);
+            } else {
+                // 如果图片加载失败，使用简单的绿色矩形表示箱子在目标点上
+                ctx.fillStyle = '#5cb85c';  // 绿色
+                ctx.fillRect(posX, posY, config.tileSize, config.tileSize);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(posX + 2, posY + 2, config.tileSize - 4, config.tileSize - 4);
+
+                // 绘制对勾
+                ctx.beginPath();
+                ctx.moveTo(posX + config.tileSize * 0.25, posY + config.tileSize * 0.5);
+                ctx.lineTo(posX + config.tileSize * 0.45, posY + config.tileSize * 0.7);
+                ctx.lineTo(posX + config.tileSize * 0.75, posY + config.tileSize * 0.3);
+                ctx.stroke();
+            }
+        } else {
+            // 普通箱子
+            if (images.box && images.box.complete && images.box.naturalWidth !== 0) {
+                ctx.drawImage(images.box, posX, posY, config.tileSize, config.tileSize);
+            } else {
+                // 如果图片加载失败，使用简单的矩形
+                ctx.fillStyle = '#b97a57';
+                ctx.fillRect(posX, posY, config.tileSize, config.tileSize);
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(posX + 2, posY + 2, config.tileSize - 4, config.tileSize - 4);
+            }
+        }
+    });
+
+    // 渲染玩家
+    renderPlayer();
+    // 新增：渲染后更新推动次数显示
+    updatePushCountDisplay();
+}
+
+// 渲染玩家
+function renderPlayer() {
+    // 选择合适的玩家图片
+    let frame = '00';
+    if (gameState.isMoving) {
+        // 动画帧直接映射
+        if (gameState.animationFrame === 0) frame = '00';
+        else if (gameState.animationFrame === 1) frame = '01';
+        else if (gameState.animationFrame === 2) frame = '02';
+    }
+
+    const posX = gameState.playerPos.x * config.tileSize;
+    const posY = gameState.playerPos.y * config.tileSize;
+
+    // 检查玩家图像是否存在
+    const playerImgLoaded = images.player &&
+        images.player[gameState.playerDirection] &&
+        images.player[gameState.playerDirection][frame] &&
+        images.player[gameState.playerDirection][frame].complete &&
+        images.player[gameState.playerDirection][frame].naturalWidth !== 0;
+
+    if (playerImgLoaded) {
+        // 绘制玩家图片
+        ctx.drawImage(images.player[gameState.playerDirection][frame], posX, posY, config.tileSize, config.tileSize);
+    } else {
+        // 如果图片没有加载成功，使用简单的形状代替
+        ctx.fillStyle = '#00f';
+        ctx.fillRect(posX + 4, posY + 4, config.tileSize - 8, config.tileSize - 8);
+        ctx.fillStyle = '#fff';
+
+        // 根据方向绘制不同的简单标记
+        const center = config.tileSize / 2;
+        ctx.beginPath();
+        if (gameState.playerDirection === 'u') {
+            ctx.moveTo(posX + center, posY + 8);
+            ctx.lineTo(posX + center - 6, posY + center);
+            ctx.lineTo(posX + center + 6, posY + center);
+        } else if (gameState.playerDirection === 'd') {
+            ctx.moveTo(posX + center, posY + config.tileSize - 8);
+            ctx.lineTo(posX + center - 6, posY + center);
+            ctx.lineTo(posX + center + 6, posY + center);
+        } else if (gameState.playerDirection === 'l') {
+            ctx.moveTo(posX + 8, posY + center);
+            ctx.lineTo(posX + center, posY + center - 6);
+            ctx.lineTo(posX + center, posY + center + 6);
+        } else if (gameState.playerDirection === 'r') {
+            ctx.moveTo(posX + config.tileSize - 8, posY + center);
+            ctx.lineTo(posX + center, posY + center - 6);
+            ctx.lineTo(posX + center, posY + center + 6);
+        }
+        ctx.fill();
+    }
+}
+
+// 监听键盘事件
+document.addEventListener('keydown', (event) => {
+    switch (event.key.toLowerCase()) {
+        case 'arrowleft':
+        case 'a':
+            movePlayer(-1, 0);
+            break;
+        case 'arrowright':
+        case 'd':
+            movePlayer(1, 0);
+            break;
+        case 'arrowup':
+        case 'w':
+            movePlayer(0, -1);
+            break;
+        case 'arrowdown':
+        case 's':
+            movePlayer(0, 1);
+            break;
+        case 'z':
+        case 'backspace':
+            undoMove();
+            break;
+    }
+});
+
+// 关闭设置模态框
+function closeSettings() {
+    document.getElementById('settings-modal').style.display = 'none';
 }

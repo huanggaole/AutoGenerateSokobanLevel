@@ -12,16 +12,27 @@ class AILevelGenerator {
      * 构造函数
      * @param {number} width - 地图宽度
      * @param {number} height - 地图高度
+     * @param {Object} options - 可选配置参数
      */
-    constructor(width, height) {
+    constructor(width, height, options = {}) {
         this.width = width;
         this.height = height;
         this.generatedLevel = null;  // 生成的关卡数据
         this.minSteps = 0;          // 最少步数
         this.iterationCount = 0;     // 迭代次数
         this.wallCount = 0;         // 墙壁数量 - 添加为类成员变量
-        this.maxSolverIterations = 5000; // 最大求解器迭代次数，防止无限循环
-        this.maxGenerationTime = 10000; // 最大生成时间(毫秒)
+
+        // 使用传入的参数或默认值
+        this.maxSolverIterations = options.maxSolverIterations || 5000; // 最大求解器迭代次数，防止无限循环
+        this.maxNodesInMemory = options.maxNodesInMemory || 15000; // 最大内存节点数
+        this.maxGenerationTime = options.maxGenerationTime || 10000; // 最大生成时间(毫秒)
+
+        // 概率分布设置
+        this.wallProbability = options.wallProbability || 0.4; // 生成墙壁的概率
+        this.boxProbability = options.boxProbability || 0.2; // 生成箱子/目标的概率
+
+        // 记录一下初始化参数，方便调试
+        console.log(`AI关卡生成器初始化: 尺寸=${width}x${height}, 最大求解迭代=${this.maxSolverIterations}, 最大节点数=${this.maxNodesInMemory}`);
     }
 
     /**
@@ -123,7 +134,7 @@ class AILevelGenerator {
                             }
                         }
                         // 降低生成箱子和目标点的概率
-                        if (Math.random() < 0.3) { // 30%概率生成箱子和目标点
+                        if (Math.random() < this.boxProbability) { // 使用设置的概率
                             this.generatedLevel.generateBox();
                             this.generatedLevel.generateAid();
                             console.log('[AI调优] 低墙壁阶段，额外生成箱子和目标点');
@@ -140,7 +151,7 @@ class AILevelGenerator {
                     } else {
                         // 墙壁数量在合理范围内，按新策略生成
                         // 前40次迭代优先生成墙壁，增加地图复杂性
-                        if (this.iterationCount < 40 || Math.random() < 0.4) { // 原0.7，调低为0.4
+                        if (this.iterationCount < 40 || Math.random() < this.wallProbability) { // 使用设置的概率
                             // 每次只生成1个墙壁，降低密度
                             let wallsAdded = 0;
                             for (let i = 0; i < 1; i++) {
@@ -149,7 +160,7 @@ class AILevelGenerator {
                                 }
                             }
                             // 降低生成箱子和目标点的概率
-                            if (Math.random() < 0.2) { // 20%概率
+                            if (Math.random() < this.boxProbability) { // 使用设置的概率
                                 this.generatedLevel.generateBox();
                                 this.generatedLevel.generateAid();
                                 console.log('[AI调优] 合理墙壁阶段，墙壁+箱子/目标点');
@@ -174,6 +185,12 @@ class AILevelGenerator {
 
                     const solver = new Solver(state);
                     solver.maxIterations = this.maxSolverIterations; // 设置最大求解迭代次数
+
+                    // 如果设置了最大内存节点数，也设置给求解器
+                    if (this.maxNodesInMemory) {
+                        solver.maxNodesInMemory = this.maxNodesInMemory;
+                    }
+
                     let result = solver.run();
 
                     if (result === -1) {
