@@ -203,6 +203,33 @@
             fill: white;
         }
 
+        /* 语言切换按钮样式 */
+        #language-btn {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            width: 40px;
+            height: 40px;
+            background-color: rgba(52, 152, 219, 0.8);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            padding: 0;
+            z-index: 1000;
+            font-weight: bold;
+            color: white;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        #language-btn:active {
+            background-color: rgba(41, 128, 185, 0.9);
+            transform: scale(0.95);
+        }
+
         /* 设置模态框样式 */
         .modal {
             display: none;
@@ -377,6 +404,9 @@
         </svg>
     </button>
 
+    <!-- 语言切换按钮 -->
+    <button id="language-btn" onclick="toggleLanguage()">中/EN</button>
+
     <div id="game-container">
         <canvas id="game-canvas"></canvas>
     </div>
@@ -523,7 +553,17 @@
             window.addEventListener('ai-level-generated', function (e) {
                 const aiInfo = document.getElementById('ai-info');
                 if (aiInfo && e.detail) {
-                    aiInfo.textContent = `AI关卡信息: 箱子最少推动次数 ${e.detail.minSteps}, 生成迭代次数 ${e.detail.iterations}, 墙壁数量 ${e.detail.wallCount || '未知'}`;
+                    // 使用多语言支持显示AI关卡信息
+                    if (window.getText) {  // 确保getText函数已加载
+                        aiInfo.textContent = window.getText('aiLevelInfo', {
+                            minSteps: e.detail.minSteps,
+                            iterations: e.detail.iterations,
+                            wallCount: e.detail.wallCount || window.getText('unknownValue')
+                        });
+                    } else {
+                        // 备用方案，使用原始字符串
+                        aiInfo.textContent = `AI关卡信息: 箱子最少推动次数 ${e.detail.minSteps}, 生成迭代次数 ${e.detail.iterations}, 墙壁数量 ${e.detail.wallCount || '未知'}`;
+                    }
                 }
             });
         });
