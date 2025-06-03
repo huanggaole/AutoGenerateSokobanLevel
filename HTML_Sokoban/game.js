@@ -3,6 +3,10 @@
 // 多语言支持
 let currentLanguage = 'zh'; // 默认中文
 
+// 建造模式功能函数
+let cancelBuildMode = null;
+let confirmBuildLevel = null;
+
 // 多语言字典
 const languageDict = {
     zh: {
@@ -12,6 +16,9 @@ const languageDict = {
         newLevelBtn: "新关卡",
         undoBtn: "撤销",
         aiDemoBtn: "AI求解",
+        saveLevelBtn: "存储关卡",
+        loadLevelBtn: "加载关卡",
+        buildLevelBtn: "搭建关卡",
         pauseBtn: "暂停演示",
         resumeBtn: "继续演示",
         instruction1: "使用方向键或WASD键移动玩家，将所有箱子推到目标点上即可完成关卡。",
@@ -53,7 +60,33 @@ const languageDict = {
         aiStepProgress: "AI演示：步骤 {current}/{total}",
         aiComplete: "AI成功完成了关卡，共移动 {steps} 步，推动箱子 {pushes} 次！",
         aiReplay: "是否要重新体验当前关卡？\n点击'确定'重新体验，点击'取消'生成新关卡。",
-        unknownValue: "未知"
+        unknownValue: "未知",
+        saveLevelSuccess: "关卡已成功保存！",
+        saveLevelFail: "关卡保存失败，请重试。",
+        loadLevelSuccess: "关卡已成功加载！",
+        loadLevelFail: "关卡加载失败，请确保已保存关卡。",
+        noSavedLevel: "没有找到已保存的关卡。",
+        buildLevelTitle: "人工搭建关卡",
+        buildLevelInstructions: "点击选择物品，然后点击游戏区域放置。",
+        buildLevelComplete: "关卡搭建完成",
+        buildLevelCancel: "取消",
+        buildLevelPlayer: "玩家",
+        buildLevelWall: "墙壁",
+        buildLevelBox: "箱子",
+        buildLevelTarget: "目标点",
+        buildLevelFloor: "地板",
+        buildLevelConfirm: "保存并开始",
+        buildLevelValidating: "验证关卡有效性...",
+        buildLevelInvalid: "关卡无效，请确保有一个玩家、至少一个箱子和相同数量的目标点，并且确保所有箱子都能到达所有目标点。",
+        buildLevelSuccess: "关卡已成功搭建！您可以开始游戏了。",
+        settingsBtn: "设置",
+        clearSceneBtn: "清空场景",
+        validateLevelBtn: "验证关卡",
+        levelValid: "关卡有解！最少推箱子步数: {minSteps}",
+        levelInvalid: "当前配置下关卡可能无解",
+        levelValidating: "正在验证关卡...",
+        sceneCleared: "场景已清空",
+        confirmClearScene: "确定要清空当前场景吗？"
     },
     en: {
         title: "AI Generated Sokoban Levels",
@@ -62,6 +95,9 @@ const languageDict = {
         newLevelBtn: "New Level",
         undoBtn: "Undo",
         aiDemoBtn: "AI Solve",
+        saveLevelBtn: "Save Level",
+        loadLevelBtn: "Load Level",
+        buildLevelBtn: "Build Level",
         pauseBtn: "Pause Demo",
         resumeBtn: "Resume Demo",
         instruction1: "Use arrow keys or WASD to move the player, push all boxes to target points to complete the level.",
@@ -103,7 +139,33 @@ const languageDict = {
         aiStepProgress: "AI Demo: Step {current}/{total}",
         aiComplete: "AI successfully completed the level with {steps} moves and {pushes} box pushes!",
         aiReplay: "Would you like to replay this level?\nClick 'OK' to replay, 'Cancel' for a new level.",
-        unknownValue: "Unknown"
+        unknownValue: "Unknown",
+        saveLevelSuccess: "Level has been saved successfully!",
+        saveLevelFail: "Failed to save level, please try again.",
+        loadLevelSuccess: "Level has been loaded successfully!",
+        loadLevelFail: "Failed to load level, please make sure you have saved a level.",
+        noSavedLevel: "No saved level found.",
+        buildLevelTitle: "Build Your Own Level",
+        buildLevelInstructions: "Click to select an item, then click on the game area to place it.",
+        buildLevelComplete: "Level Building Complete",
+        buildLevelCancel: "Cancel",
+        buildLevelPlayer: "Player",
+        buildLevelWall: "Wall",
+        buildLevelBox: "Box",
+        buildLevelTarget: "Target",
+        buildLevelFloor: "Floor",
+        buildLevelConfirm: "Confirm & Start",
+        buildLevelValidating: "Validating level...",
+        buildLevelInvalid: "Invalid level. Please ensure there is one player, at least one box and the same number of targets, and make sure all boxes can reach all targets.",
+        buildLevelSuccess: "Level has been built successfully! You can start playing now.",
+        settingsBtn: "Settings",
+        clearSceneBtn: "Clear Scene",
+        validateLevelBtn: "Validate Level",
+        levelValid: "Level is solvable! Minimum box pushes: {minSteps}",
+        levelInvalid: "Level may be unsolvable with current configuration",
+        levelValidating: "Validating level...",
+        sceneCleared: "Scene cleared",
+        confirmClearScene: "Are you sure you want to clear the current scene?"
     }
 };
 
@@ -148,6 +210,15 @@ function updatePageText() {
     document.getElementById('reset-btn').textContent = getText('resetBtn');
     document.getElementById('new-level-btn').textContent = getText('newLevelBtn');
     document.getElementById('undo-btn').textContent = getText('undoBtn');
+    document.getElementById('save-level-btn').textContent = getText('saveLevelBtn');
+    document.getElementById('load-level-btn').textContent = getText('loadLevelBtn');
+    document.getElementById('build-level-btn').textContent = getText('buildLevelBtn');
+
+    // 更新设置按钮文本
+    const settingsBtn = document.getElementById('settings-btn');
+    if (settingsBtn) {
+        settingsBtn.textContent = getText('settingsBtn');
+    }
 
     const aiDemoBtn = document.getElementById('ai-demo-btn');
     if (aiDemoBtn) {
@@ -176,6 +247,9 @@ function updatePageText() {
 
     // 更新设置模态框
     updateSettingsModal();
+
+    // 更新建造模式面板（如果存在）
+    updateBuildModeUI();
 }
 
 // 更新AI信息文本
@@ -303,6 +377,9 @@ let gameState = {
     generatingLevel: false, // 是否正在生成关卡
     minSolutionSteps: 0    // 最少解决步骤数
 };
+
+// 当前关卡迭代次数
+let currentLevelIterations = 1;
 
 // 保存初始关卡状态以便重置
 let initialLevelState = {
@@ -2405,4 +2482,1434 @@ document.addEventListener('keydown', (event) => {
 // 关闭设置模态框
 function closeSettings() {
     document.getElementById('settings-modal').style.display = 'none';
+}
+
+// 存储关卡功能
+window.saveLevel = function () {
+    // 提取墙壁位置
+    const walls = [];
+    for (let y = 0; y < gameState.board.length; y++) {
+        for (let x = 0; x < gameState.board[y].length; x++) {
+            if (gameState.board[y][x] === 'wall') {
+                walls.push({ x, y });
+            }
+        }
+    }
+
+    // 创建关卡数据
+    const levelData = {
+        boardSize: config.boardSize,
+        walls: walls.map(wall => ({ x: wall.x, y: wall.y })),
+        boxes: gameState.boxes.map(box => ({ x: box.x, y: box.y })),
+        targets: gameState.targets.map(target => ({ x: target.x, y: target.y })),
+        playerPos: { x: gameState.playerPos.x, y: gameState.playerPos.y },
+        minSolutionSteps: gameState.minSolutionSteps || 0,
+        iterations: currentLevelIterations || 1,
+        wallCount: walls.length
+    };
+
+    // 将数据转换为JSON字符串
+    const jsonString = JSON.stringify(levelData, null, 2);
+
+    // 创建一个Blob对象
+    const blob = new Blob([jsonString], { type: 'application/json' });
+
+    // 创建一个临时的URL链接
+    const url = window.URL.createObjectURL(blob);
+
+    // 创建一个临时的<a>元素
+    const link = document.createElement('a');
+    link.href = url;
+
+    // 设置文件名
+    const date = new Date();
+    const dateString = `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}`;
+    const timeString = `${date.getHours().toString().padStart(2, '0')}${date.getMinutes().toString().padStart(2, '0')}${date.getSeconds().toString().padStart(2, '0')}`;
+    link.download = `sokoban_level_${dateString}_${timeString}.json`;
+
+    // 将<a>元素添加到DOM中
+    document.body.appendChild(link);
+
+    // 模拟点击<a>元素
+    link.click();
+
+    // 移除<a>元素
+    document.body.removeChild(link);
+
+    // 释放URL对象
+    window.URL.revokeObjectURL(url);
+
+    // 同时保存到localStorage作为备份
+    try {
+        localStorage.setItem('lastSavedLevel', jsonString);
+        console.log('关卡已保存到本地存储');
+    } catch (e) {
+        console.error('无法保存关卡到本地存储:', e);
+    }
+
+    alert(getText('levelSaved'));
+};
+
+// 加载关卡功能
+window.loadLevel = function () {
+    // 创建文件输入元素
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.json';
+    fileInput.style.display = 'none';
+
+    // 添加文件选择事件监听器
+    fileInput.addEventListener('change', function (event) {
+        const file = event.target.files[0];
+        if (!file) {
+            console.log('没有选择文件');
+
+            // 尝试从localStorage加载最后保存的关卡
+            tryLoadFromLocalStorage();
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            try {
+                console.log('读取到文件内容:', e.target.result.substring(0, 100) + '...');
+
+                // 解析JSON数据
+                const levelData = JSON.parse(e.target.result);
+                console.log('解析后的关卡数据:', JSON.stringify(levelData, null, 2).substring(0, 200) + '...');
+
+                // 加载关卡
+                const success = loadLevelFromData(levelData);
+
+                if (success) {
+                    // 显示成功消息
+                    alert(getText('loadLevelSuccess'));
+                }
+            } catch (error) {
+                console.error("解析关卡数据失败:", error);
+                console.error("错误详情:", error.message);
+                console.error("文件内容片段:", e.target.result.substring(0, 200));
+                alert(getText('loadLevelFail') + "\n错误信息: " + error.message);
+            }
+        };
+
+        reader.onerror = function (error) {
+            console.error("读取文件失败:", error);
+            alert(getText('loadLevelFail') + "\n读取文件错误");
+        };
+
+        // 读取文件内容
+        reader.readAsText(file);
+    });
+
+    // 触发文件选择对话框
+    document.body.appendChild(fileInput);
+    fileInput.click();
+
+    // 清理
+    setTimeout(() => {
+        document.body.removeChild(fileInput);
+    }, 1000);
+};
+
+// 从关卡数据加载关卡的通用函数
+function loadLevelFromData(levelData) {
+    console.log("开始加载关卡数据");
+
+    // 检查关卡数据的有效性
+    if (!levelData) {
+        console.error("无效的关卡数据: 数据为空");
+        alert("无效的关卡数据: 数据为空");
+        return false;
+    }
+
+    try {
+        // 适配不同格式的关卡数据
+        const width = levelData.width || (levelData.boardSize ? levelData.boardSize.width : null);
+        const height = levelData.height || (levelData.boardSize ? levelData.boardSize.height : null);
+        const player = levelData.player || levelData.playerPos;
+        const boxes = levelData.boxes;
+        const targets = levelData.targets;
+        const walls = levelData.walls;
+
+        console.log("检查关键数据:", {
+            width, height,
+            playerExists: !!player,
+            boxesCount: boxes ? boxes.length : 0,
+            targetsCount: targets ? targets.length : 0,
+            wallsCount: walls ? walls.length : 0
+        });
+
+        if (!width || !height) {
+            console.error("无效的关卡数据: 缺少尺寸信息");
+            alert("无效的关卡数据: 缺少棋盘尺寸信息");
+            return false;
+        }
+
+        if (!player || typeof player.x !== 'number' || typeof player.y !== 'number') {
+            console.error("无效的关卡数据: 缺少有效的玩家位置");
+            alert("无效的关卡数据: 缺少有效的玩家位置");
+            return false;
+        }
+
+        if (!Array.isArray(boxes) || boxes.length === 0) {
+            console.error("无效的关卡数据: 缺少箱子数据");
+            alert("无效的关卡数据: 缺少箱子数据");
+            return false;
+        }
+
+        if (!Array.isArray(targets) || targets.length === 0) {
+            console.error("无效的关卡数据: 缺少目标点数据");
+            alert("无效的关卡数据: 缺少目标点数据");
+            return false;
+        }
+
+        // 设置棋盘尺寸
+        config.boardSize.width = width;
+        config.boardSize.height = height;
+
+        // 重置当前游戏状态
+        gameState.moves = 0;
+        gameState.boxPushes = 0;
+        gameState.playerDirection = 'd';
+        gameState.isMoving = false;
+        gameState.animationFrame = 0;
+        gameState.animationStep = 0;
+        gameState.moveHistory = [];
+
+        // 初始化新的游戏板
+        initializeBoard();
+
+        // 加载墙壁
+        let wallCount = 0;
+        if (Array.isArray(walls)) {
+            for (const wall of walls) {
+                if (wall.x >= 0 && wall.x < width && wall.y >= 0 && wall.y < height) {
+                    gameState.board[wall.y][wall.x] = 'wall';
+                    wallCount++;
+                }
+            }
+        }
+
+        // 加载箱子
+        gameState.boxes = [];
+        for (const box of boxes) {
+            if (box.x >= 0 && box.x < width && box.y >= 0 && box.y < height) {
+                gameState.boxes.push({ x: box.x, y: box.y });
+            }
+        }
+
+        // 加载目标点
+        gameState.targets = [];
+        for (const target of targets) {
+            if (target.x >= 0 && target.x < width && target.y >= 0 && target.y < height) {
+                gameState.targets.push({ x: target.x, y: target.y });
+            }
+        }
+
+        // 加载玩家位置
+        if (player.x >= 0 && player.x < width && player.y >= 0 && player.y < height) {
+            gameState.playerPos = { x: player.x, y: player.y };
+        } else {
+            console.error("玩家位置超出棋盘范围");
+            gameState.playerPos = { x: 1, y: 1 }; // 默认位置
+        }
+        gameState.startPos = { ...gameState.playerPos };
+        gameState.targetPos = { ...gameState.playerPos };
+
+        // 更新AI关卡信息
+        gameState.minSolutionSteps = levelData.minSteps || levelData.minSolutionSteps || 0;
+        currentLevelIterations = levelData.generationIterations || levelData.iterations || 1;
+        updateAILevelInfo(gameState.minSolutionSteps, currentLevelIterations, wallCount);
+
+        // 保存原始状态用于重置
+        saveInitialState();
+
+        // 初始化画布尺寸
+        initCanvas();
+
+        // 重新加载图片以适应新的尺寸
+        loadImages().then(() => {
+            // 渲染游戏
+            renderGame();
+        });
+
+        console.log("关卡加载成功");
+        return true;
+    } catch (error) {
+        console.error("加载关卡数据过程中发生错误:", error);
+        alert("加载关卡数据失败: " + error.message);
+        return false;
+    }
+}
+
+// 人工搭建关卡功能 - 已实现在之前的代码中，保持不变
+
+// 建造模式变量
+let buildMode = false;
+let selectedTile = null;
+let buildModeModal = null;
+let buildModeToolbar = null;
+
+// 人工搭建关卡功能
+window.buildLevel = function () {
+    console.log("开始人工搭建关卡");
+
+    // 如果已经在建造模式，不做任何操作
+    if (buildMode) {
+        console.log("已经在建造模式中，操作取消");
+        return;
+    }
+
+    // 如果AI演示正在进行，先结束演示
+    if (aiDemoInProgress) {
+        endAiDemo();
+    }
+
+    buildMode = true;
+    console.log("进入建造模式");
+
+    // 保存当前关卡状态以备取消时恢复
+    const savedState = {
+        board: deepCopy(gameState.board),
+        boxes: deepCopy(gameState.boxes),
+        targets: deepCopy(gameState.targets),
+        playerPos: deepCopy(gameState.playerPos),
+        boardWidth: config.boardSize.width,
+        boardHeight: config.boardSize.height
+    };
+    console.log("已保存当前关卡状态用于恢复");
+
+    // 不再默认清空场景，保留当前场景状态
+    // 注意：这里不再调用initializeBoard()和清空boxes、targets、playerPos等
+
+    // 创建建造模式界面
+    createBuildModeUI();
+
+    // 添加画布点击事件
+    const gameCanvas = document.getElementById('game-canvas');
+    gameCanvas.addEventListener('click', handleBuildModeClick);
+    console.log("已添加画布点击事件监听器");
+
+    // 禁用其他按钮
+    document.getElementById('reset-btn').disabled = true;
+    document.getElementById('new-level-btn').disabled = true;
+    document.getElementById('undo-btn').disabled = true;
+    document.getElementById('ai-demo-btn').disabled = true;
+    document.getElementById('save-level-btn').disabled = true;
+    document.getElementById('load-level-btn').disabled = true;
+    console.log("已禁用其他功能按钮");
+
+    // 渲染当前场景
+    renderGame();
+
+    // 定义取消函数 - 在局部作用域内定义
+    cancelBuildMode = function () {
+        console.log("执行取消建造模式操作");
+
+        // 恢复之前的关卡状态
+        gameState.board = savedState.board;
+        gameState.boxes = savedState.boxes;
+        gameState.targets = savedState.targets;
+        gameState.playerPos = savedState.playerPos;
+        config.boardSize.width = savedState.boardWidth;
+        config.boardSize.height = savedState.boardHeight;
+        console.log("已恢复之前的关卡状态");
+
+        // 移除建造模式界面
+        removeBuildModeUI();
+
+        // 移除画布点击事件监听
+        gameCanvas.removeEventListener('click', handleBuildModeClick);
+        console.log("已移除画布点击事件监听器");
+
+        // 启用其他按钮
+        document.getElementById('reset-btn').disabled = false;
+        document.getElementById('new-level-btn').disabled = false;
+        document.getElementById('undo-btn').disabled = false;
+        document.getElementById('ai-demo-btn').disabled = false;
+        document.getElementById('save-level-btn').disabled = false;
+        document.getElementById('load-level-btn').disabled = false;
+        console.log("已重新启用其他功能按钮");
+
+        buildMode = false;
+
+        // 重新渲染游戏
+        renderGame();
+        console.log("已退出建造模式");
+    };
+
+    // 定义确认函数 - 在局部作用域内定义
+    confirmBuildLevel = async function () {
+        console.log("执行确认建造完成操作");
+
+        // 验证关卡是否有效 - 仅检查基础结构，不再验证是否可解
+        if (!validateBuiltLevel()) {
+            console.log("关卡验证失败，已取消确认操作");
+            return; // 已经在validateBuiltLevel中显示了错误信息，这里直接返回
+        }
+
+        // 保存初始状态用于重置
+        saveInitialState();
+        console.log("已保存当前关卡为初始状态");
+
+        // 移除建造模式界面
+        removeBuildModeUI();
+
+        // 移除画布点击事件监听
+        const gameCanvas = document.getElementById('game-canvas');
+        if (gameCanvas) {
+            gameCanvas.removeEventListener('click', handleBuildModeClick);
+        }
+        console.log("已移除画布点击事件监听器");
+
+        // 启用其他按钮
+        document.getElementById('reset-btn').disabled = false;
+        document.getElementById('new-level-btn').disabled = false;
+        document.getElementById('undo-btn').disabled = false;
+        document.getElementById('ai-demo-btn').disabled = false;
+        document.getElementById('save-level-btn').disabled = false;
+        document.getElementById('load-level-btn').disabled = false;
+        console.log("已重新启用其他功能按钮");
+
+        buildMode = false;
+
+        // 计算和更新关卡基本信息
+        let wallCount = countTiles('wall');
+        let boxCount = gameState.boxes.length;
+        let targetCount = gameState.targets.length;
+
+        console.log(`关卡基本数据: 尺寸=${config.boardSize.width}×${config.boardSize.height}, ` +
+            `墙壁=${wallCount}, 箱子=${boxCount}, 目标点=${targetCount}`);
+
+        // 更新基本关卡信息
+        updateBuildLevelInfo(0, 1, wallCount, boxCount);
+
+        // 显示成功消息
+        alert(getText('buildLevelSuccess'));
+
+        // 添加自定义标记，显示这是玩家创建的关卡
+        const aiInfo = document.getElementById('ai-info');
+        if (aiInfo) {
+            aiInfo.innerHTML += `<br><span style="color:#27ae60">【玩家自建关卡】</span>`;
+        }
+
+        // 重新渲染游戏
+        renderGame();
+        console.log("已完成关卡构建，退出建造模式");
+    };
+
+    // 删除使用说明弹窗
+    // alert(getText('buildLevelInstructions')); // 这行被删除了
+};
+
+// 移除建造模式界面
+function removeBuildModeUI() {
+    console.log("移除建造模式界面");
+
+    if (buildModeModal && buildModeModal.parentNode) {
+        buildModeModal.parentNode.removeChild(buildModeModal);
+        buildModeModal = null;
+        console.log("建造模式界面已移除");
+    } else {
+        console.log("未找到建造模式界面元素，无需移除");
+    }
+}
+
+// 创建建造模式界面
+function createBuildModeUI() {
+    console.log("创建建造模式界面");
+
+    // 创建模态框容器
+    buildModeModal = document.createElement('div');
+    buildModeModal.id = 'build-mode-panel';
+    buildModeModal.style.position = 'relative'; // 改为相对定位，不遮挡游戏区域
+    buildModeModal.style.width = '100%';
+    buildModeModal.style.maxWidth = '600px'; // 添加最大宽度限制
+    buildModeModal.style.margin = '10px auto'; // 设置上下边距10px，左右自动居中
+    buildModeModal.style.backgroundColor = '#f5f7fa'; // 浅灰蓝色背景，更现代清爽
+    buildModeModal.style.zIndex = '100';
+    buildModeModal.style.display = 'flex';
+    buildModeModal.style.flexDirection = 'column';
+    buildModeModal.style.alignItems = 'center';
+    buildModeModal.style.padding = '15px';
+    buildModeModal.style.boxSizing = 'border-box';
+    buildModeModal.style.borderTop = '2px solid #3498db'; // 蓝色边框
+    buildModeModal.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)'; // 添加阴影效果
+    buildModeModal.style.borderRadius = '8px'; // 圆角
+
+    // 创建两列布局容器
+    const panelContent = document.createElement('div');
+    panelContent.style.display = 'flex';
+    panelContent.style.width = '100%';
+    panelContent.style.maxWidth = '580px'; // 略小于父容器的最大宽度
+    panelContent.style.gap = '20px';
+    panelContent.style.alignItems = 'flex-start';
+
+    // 左侧工具栏和工具选择
+    const leftColumn = document.createElement('div');
+    leftColumn.style.flex = '1';
+    leftColumn.style.display = 'flex';
+    leftColumn.style.flexDirection = 'column';
+    leftColumn.style.alignItems = 'center';
+
+    // 右侧设置和按钮
+    const rightColumn = document.createElement('div');
+    rightColumn.style.flex = '1';
+    rightColumn.style.display = 'flex';
+    rightColumn.style.flexDirection = 'column';
+    rightColumn.style.alignItems = 'center';
+
+    // 创建标题
+    const title = document.createElement('h2');
+    title.textContent = getText('buildLevelTitle');
+    title.style.color = '#2c3e50'; // 深蓝灰色
+    title.style.margin = '5px 0 15px 0';
+    title.style.fontSize = '24px';
+    title.style.fontWeight = '600';
+    buildModeModal.appendChild(title);
+
+    // 创建说明文本
+    const instructions = document.createElement('p');
+    instructions.textContent = getText('buildLevelInstructions');
+    instructions.style.color = '#7f8c8d'; // 灰色
+    instructions.style.margin = '0 0 15px 0';
+    instructions.style.textAlign = 'center';
+    instructions.style.fontSize = '14px';
+    instructions.style.maxWidth = '700px';
+    buildModeModal.appendChild(instructions);
+
+    // 左侧标题
+    const toolsTitle = document.createElement('h3');
+    toolsTitle.textContent = '工具选择';
+    toolsTitle.style.color = '#2c3e50';
+    toolsTitle.style.margin = '10px 0';
+    toolsTitle.style.fontSize = '16px';
+    toolsTitle.style.alignSelf = 'flex-start';
+    leftColumn.appendChild(toolsTitle);
+
+    // 创建工具栏
+    buildModeToolbar = document.createElement('div');
+    buildModeToolbar.id = 'build-mode-toolbar';
+    buildModeToolbar.style.display = 'flex';
+    buildModeToolbar.style.flexWrap = 'wrap';
+    buildModeToolbar.style.gap = '10px';
+    buildModeToolbar.style.justifyContent = 'flex-start';
+    buildModeToolbar.style.width = '100%';
+    buildModeToolbar.style.margin = '10px 0';
+    buildModeToolbar.style.padding = '10px';
+    buildModeToolbar.style.backgroundColor = 'white'; // 白色背景
+    buildModeToolbar.style.borderRadius = '8px';
+    buildModeToolbar.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+
+    // 定义工具按钮
+    const tools = [
+        { id: 'player', name: getText('buildLevelPlayer'), color: '#3498db', icon: '👤' },
+        { id: 'wall', name: getText('buildLevelWall'), color: '#7f8c8d', icon: '🧱' },
+        { id: 'box', name: getText('buildLevelBox'), color: '#e67e22', icon: '📦' },
+        { id: 'target', name: getText('buildLevelTarget'), color: '#2ecc71', icon: '🎯' },
+        { id: 'floor', name: getText('buildLevelFloor'), color: '#ecf0f1', icon: '⬜' }
+    ];
+
+    // 创建工具按钮
+    tools.forEach(tool => {
+        const button = document.createElement('button');
+        button.innerHTML = `<span style="margin-right:5px;">${tool.icon}</span> ${tool.name}`;
+        button.id = `build-${tool.id}`;
+        button.style.padding = '10px 15px';
+        button.style.backgroundColor = tool.color;
+        button.style.color = tool.id === 'floor' ? '#333' : 'white';
+        button.style.border = 'none';
+        button.style.borderRadius = '5px';
+        button.style.cursor = 'pointer';
+        button.style.fontSize = '14px';
+        button.style.display = 'flex';
+        button.style.alignItems = 'center';
+        button.style.justifyContent = 'center';
+        button.style.fontWeight = 'bold';
+        button.style.transition = 'all 0.2s ease';
+        button.style.width = 'calc(50% - 5px)'; // 每行两个按钮
+        button.style.boxSizing = 'border-box';
+        button.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+
+        button.addEventListener('mouseover', () => {
+            button.style.transform = 'translateY(-2px)';
+            button.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+        });
+
+        button.addEventListener('mouseout', () => {
+            if (selectedTile !== tool.id) {
+                button.style.transform = 'none';
+                button.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+            }
+        });
+
+        button.addEventListener('click', () => {
+            // 移除之前选中的按钮的选中状态
+            document.querySelectorAll('#build-mode-toolbar button').forEach(btn => {
+                btn.style.transform = 'none';
+                btn.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+            });
+
+            // 设置当前选中的工具
+            selectedTile = tool.id;
+            console.log(`已选择工具: ${tool.name} (${tool.id})`);
+
+            // 添加选中样式
+            button.style.transform = 'translateY(-2px)';
+            button.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15), 0 0 0 2px #3498db';
+        });
+
+        buildModeToolbar.appendChild(button);
+    });
+
+    leftColumn.appendChild(buildModeToolbar);
+
+    // 将左右两列添加到面板中
+    panelContent.appendChild(leftColumn);
+    panelContent.appendChild(rightColumn);
+    buildModeModal.appendChild(panelContent);
+
+    // 创建清空场景按钮
+    const clearSceneButton = document.createElement('button');
+    clearSceneButton.textContent = getText('clearSceneBtn');
+    clearSceneButton.id = 'clear-scene-btn';
+    clearSceneButton.style.padding = '10px 15px';
+    clearSceneButton.style.backgroundColor = '#9b59b6'; // 紫色
+    clearSceneButton.style.color = 'white';
+    clearSceneButton.style.border = 'none';
+    clearSceneButton.style.borderRadius = '5px';
+    clearSceneButton.style.cursor = 'pointer';
+    clearSceneButton.style.fontSize = '14px';
+    clearSceneButton.style.marginTop = '15px';
+    clearSceneButton.style.fontWeight = 'bold';
+    clearSceneButton.style.width = '100%';
+    clearSceneButton.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+    clearSceneButton.style.transition = 'all 0.2s ease';
+
+    // 绑定点击事件
+    clearSceneButton.onclick = function () {
+        console.log("点击了清空场景按钮");
+        if (confirm(getText('confirmClearScene'))) {
+            clearCurrentScene();
+        }
+    };
+
+    leftColumn.appendChild(clearSceneButton);
+
+    // 右侧标题
+    const settingsTitle = document.createElement('h3');
+    settingsTitle.textContent = '关卡设置';
+    settingsTitle.style.color = '#2c3e50';
+    settingsTitle.style.margin = '10px 0';
+    settingsTitle.style.fontSize = '16px';
+    settingsTitle.style.alignSelf = 'flex-start';
+    rightColumn.appendChild(settingsTitle);
+
+    // 创建关卡尺寸控制
+    const sizeControl = document.createElement('div');
+    sizeControl.style.display = 'flex';
+    sizeControl.style.alignItems = 'center';
+    sizeControl.style.width = '100%';
+    sizeControl.style.padding = '15px';
+    sizeControl.style.backgroundColor = 'white';
+    sizeControl.style.borderRadius = '8px';
+    sizeControl.style.marginTop = '10px';
+    sizeControl.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+
+    const sizeLabel = document.createElement('label');
+    sizeLabel.textContent = getText('boardSize') + ': ';
+    sizeLabel.style.color = '#2c3e50';
+    sizeLabel.style.marginRight = '10px';
+    sizeLabel.style.fontWeight = 'bold';
+    sizeControl.appendChild(sizeLabel);
+
+    const sizeSelect = document.createElement('select');
+    sizeSelect.id = 'build-board-size';
+    sizeSelect.style.padding = '8px 10px';
+    sizeSelect.style.borderRadius = '4px';
+    sizeSelect.style.border = '1px solid #ddd';
+    sizeSelect.style.flex = '1';
+    sizeSelect.style.backgroundColor = '#fff';
+    sizeSelect.style.fontSize = '14px';
+    sizeSelect.style.color = '#2c3e50';
+    sizeSelect.style.cursor = 'pointer';
+    sizeSelect.style.outline = 'none';
+
+    // 添加尺寸选项
+    for (let size = 6; size <= 15; size++) {
+        const option = document.createElement('option');
+        option.value = size;
+        option.textContent = `${size}×${size}`;
+        // 默认选中当前尺寸
+        if (size === config.boardSize.width) {
+            option.selected = true;
+        }
+        sizeSelect.appendChild(option);
+    }
+
+    // 添加尺寸改变事件
+    sizeSelect.addEventListener('change', function () {
+        const newSize = parseInt(this.value);
+        console.log(`尺寸选择改变: ${newSize}×${newSize}`);
+        // 确认是否要改变尺寸
+        if (confirm(getText('sizeChanged'))) {
+            // 保存当前已放置的元素
+            const savedElements = {
+                boxes: gameState.boxes.filter(box => box.x < newSize && box.y < newSize),
+                targets: gameState.targets.filter(target => target.x < newSize && target.y < newSize),
+                player: (gameState.playerPos.x < newSize && gameState.playerPos.y < newSize) ?
+                    gameState.playerPos : { x: -1, y: -1 }
+            };
+
+            // 更新尺寸
+            config.boardSize.width = newSize;
+            config.boardSize.height = newSize;
+
+            // 初始化新游戏板
+            initializeBoard();
+
+            // 恢复已放置的元素
+            gameState.boxes = savedElements.boxes;
+            gameState.targets = savedElements.targets;
+            gameState.playerPos = savedElements.player;
+
+            // 调整画布尺寸
+            initCanvas();
+
+            // 重新渲染
+            renderGame();
+            console.log(`已更改尺寸为 ${newSize}×${newSize}`);
+        } else {
+            // 还原选择
+            for (let i = 0; i < sizeSelect.options.length; i++) {
+                if (parseInt(sizeSelect.options[i].value) === config.boardSize.width) {
+                    sizeSelect.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+    });
+
+    sizeControl.appendChild(sizeSelect);
+    rightColumn.appendChild(sizeControl);
+
+    // 不再需要验证状态显示区域
+
+    // 创建按钮容器
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.display = 'flex';
+    buttonContainer.style.justifyContent = 'space-between';
+    buttonContainer.style.width = '100%';
+    buttonContainer.style.marginTop = '15px';
+
+    // 创建取消按钮
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = getText('buildLevelCancel');
+    cancelButton.id = 'build-cancel-btn';
+    cancelButton.style.padding = '12px 20px';
+    cancelButton.style.backgroundColor = '#e74c3c';
+    cancelButton.style.color = 'white';
+    cancelButton.style.border = 'none';
+    cancelButton.style.borderRadius = '5px';
+    cancelButton.style.cursor = 'pointer';
+    cancelButton.style.fontSize = '14px';
+    cancelButton.style.fontWeight = 'bold';
+    cancelButton.style.marginRight = '10px';
+    cancelButton.style.flex = '1';
+    cancelButton.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+    cancelButton.style.transition = 'all 0.2s ease';
+
+    // 直接绑定点击事件，不使用window对象
+    cancelButton.onclick = function () {
+        console.log("点击了取消按钮");
+        cancelBuildMode();
+    };
+
+    buttonContainer.appendChild(cancelButton);
+
+    // 创建确认按钮
+    const confirmButton = document.createElement('button');
+    confirmButton.textContent = getText('buildLevelConfirm');
+    confirmButton.id = 'build-confirm-btn';
+    confirmButton.style.padding = '12px 20px';
+    confirmButton.style.backgroundColor = '#2ecc71';
+    confirmButton.style.color = 'white';
+    confirmButton.style.border = 'none';
+    confirmButton.style.borderRadius = '5px';
+    confirmButton.style.cursor = 'pointer';
+    confirmButton.style.fontSize = '14px';
+    confirmButton.style.fontWeight = 'bold';
+    confirmButton.style.flex = '1';
+    confirmButton.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+    confirmButton.style.transition = 'all 0.2s ease';
+
+    // 直接绑定点击事件，不使用window对象
+    confirmButton.onclick = function () {
+        console.log("点击了确认按钮");
+        confirmBuildLevel();
+    };
+
+    buttonContainer.appendChild(confirmButton);
+    rightColumn.appendChild(buttonContainer);
+
+    // 找到游戏容器并插入在其后面(而不是内部)
+    const gameContainer = document.getElementById('game-container');
+    if (gameContainer && gameContainer.parentNode) {
+        gameContainer.parentNode.insertBefore(buildModeModal, gameContainer.nextSibling);
+    } else {
+        // 如果找不到游戏容器，则添加到body
+        document.body.appendChild(buildModeModal);
+    }
+
+    // 默认选中玩家工具
+    setTimeout(() => {
+        const playerButton = document.getElementById('build-player');
+        if (playerButton) {
+            playerButton.click();
+        } else {
+            console.warn('未找到玩家工具按钮');
+            // 默认选中第一个可用的工具按钮
+            const firstToolButton = buildModeToolbar.querySelector('button');
+            if (firstToolButton) {
+                firstToolButton.click();
+            }
+        }
+    }, 100);
+
+    console.log("建造模式界面创建完成");
+}
+
+// 验证当前关卡是否有解
+async function validateCurrentLevel() {
+    console.log("开始验证当前关卡");
+
+    // 首先验证关卡基础结构是否合法
+    if (!validateBuiltLevel()) {
+        console.log("关卡基础验证失败");
+        // 验证失败已在validateBuiltLevel中显示错误信息
+        return;
+    }
+
+    // 显示验证中状态
+    const validationResultDiv = document.getElementById('validation-result');
+    if (validationResultDiv) {
+        validationResultDiv.textContent = getText('buildLevelValidating');
+        validationResultDiv.style.display = 'block';
+        validationResultDiv.style.backgroundColor = '#f39c12'; // 黄色，表示正在验证
+        validationResultDiv.style.color = 'white';
+    }
+
+    try {
+        console.log("创建求解器状态...");
+        // 创建用于求解的State对象
+        const solverState = await createSolverState();
+
+        if (!solverState) {
+            console.error('创建求解状态失败');
+            showValidationResult(false, 0, '创建求解状态失败');
+            return;
+        }
+
+        console.log("求解中...");
+        // 验证是否有解，使用更大的迭代次数限制
+        const solution = await solvePuzzleWithHigherLimits(solverState);
+
+        if (solution && solution.length > 0) {
+            // 关卡有解
+            console.log(`关卡验证成功！找到解决方案，共${solution.length}步`);
+
+            // 计算推箱子步数
+            const boxPushes = solution.filter(step =>
+                step.boxIndex !== undefined && step.boxIndex !== -1
+            ).length;
+
+            // 显示成功结果
+            showValidationResult(true, boxPushes);
+        } else {
+            // 关卡无解或求解超时
+            console.log("关卡无法求解");
+
+            // 获取内存和迭代信息
+            const memoryLimit = defaultSettings.maxNodesInMemory || 15000;
+            const iterLimit = defaultSettings.maxSolverIterations || 10000;
+
+            showValidationResult(false, 0,
+                `求解器无法在限定资源内找到解决方案。复杂关卡可能需要多次尝试。`);
+        }
+    } catch (e) {
+        console.error("验证关卡过程中出错:", e);
+        showValidationResult(false, 0, e.message);
+    }
+}
+
+/**
+ * 使用更高的限制参数求解推箱子关卡
+ * @param {State} state - 初始状态
+ * @returns {Array} 解决步骤
+ */
+async function solvePuzzleWithHigherLimits(state) {
+    try {
+        // 导入求解器
+        const { Solver } = await import('./js/Solver.js');
+
+        // 创建求解器实例
+        const solver = new Solver(state);
+
+        // 设置更高的最大迭代次数，确保能找到解决方案
+        solver.maxIterations = 50000; // 增加到5万次迭代
+        solver.maxNodesInMemory = 100000; // 增加内存节点数限制至10万
+
+        console.log(`开始求解，最大迭代次数: ${solver.maxIterations}, 最大内存节点数: ${solver.maxNodesInMemory}`);
+
+        // 执行求解
+        const result = solver.run();
+
+        if (result === 1) {
+            console.log('找到解决方案，步骤数:', solver.steplist.length - 1);
+            return solver.steplist;
+        } else if (result === -1) {
+            console.error('关卡无解');
+            return null;
+        } else {
+            // 检查是因为迭代次数还是内存节点数限制导致的停止
+            let limitReason = '';
+            if (solver.iterations >= solver.maxIterations) {
+                limitReason = `达到最大迭代次数${solver.maxIterations}`;
+            } else {
+                limitReason = `达到最大内存节点数${solver.maxNodesInMemory}`;
+            }
+            console.error(`求解超时，${limitReason}`);
+            return null;
+        }
+    } catch (error) {
+        console.error('求解过程出错:', error);
+        return null;
+    }
+}
+
+// 显示验证结果
+function showValidationResult(isValid, minSteps = 0, errorMsg = null) {
+    const validationResultDiv = document.getElementById('validation-result');
+    if (!validationResultDiv) return;
+
+    validationResultDiv.style.display = 'block';
+    // 清空之前的内容
+    validationResultDiv.innerHTML = '';
+
+    if (isValid) {
+        // 关卡有解
+        validationResultDiv.textContent = getText('levelSolved', { minSteps });
+        validationResultDiv.style.backgroundColor = '#27ae60'; // 绿色
+        validationResultDiv.style.color = 'white';
+    } else {
+        // 关卡无解或验证出错
+        const message = errorMsg ?
+            `${getText('levelUnsolved')} (${errorMsg})` :
+            getText('levelUnsolved');
+
+        const messageElem = document.createElement('div');
+        messageElem.textContent = message;
+        validationResultDiv.appendChild(messageElem);
+
+        // 添加重试提示
+        const retryMsg = document.createElement('div');
+        retryMsg.innerHTML = '提示：关卡可能有解，但求解器资源有限。您可以：<br>' +
+            '1. 再次点击"验证关卡"按钮尝试<br>' +
+            '2. 简化关卡设计<br>' +
+            '3. 直接点击"确认保存并开始"尝试自己解决';
+        retryMsg.style.fontSize = '12px';
+        retryMsg.style.marginTop = '8px';
+        retryMsg.style.fontWeight = 'normal';
+        retryMsg.style.lineHeight = '1.5';
+
+        validationResultDiv.appendChild(retryMsg);
+        validationResultDiv.style.backgroundColor = '#e74c3c'; // 红色
+        validationResultDiv.style.color = 'white';
+    }
+}
+
+// 处理建造模式下的画布点击
+function handleBuildModeClick(event) {
+    if (!selectedTile) return;
+
+    // 获取点击位置对应的格子坐标
+    const rect = event.target.getBoundingClientRect();
+    const scaleX = event.target.width / rect.width;
+    const scaleY = event.target.height / rect.height;
+
+    const x = Math.floor((event.clientX - rect.left) * scaleX / config.tileSize);
+    const y = Math.floor((event.clientY - rect.top) * scaleY / config.tileSize);
+
+    // 确保坐标在棋盘范围内
+    if (x < 0 || x >= config.boardSize.width || y < 0 || y >= config.boardSize.height) return;
+
+    // 根据选中的工具进行相应操作
+    switch (selectedTile) {
+        case 'player':
+            // 移除之前的玩家位置
+            gameState.playerPos = { x, y };
+
+            // 确保该位置没有墙壁
+            gameState.board[y][x] = 'floor';
+            break;
+
+        case 'wall':
+            // 添加墙壁
+            // 先检查该位置是否已有墙壁
+            if (gameState.board[y][x] === 'wall') {
+                // 如果已有墙壁，则移除
+                gameState.board[y][x] = 'floor';
+            } else {
+                // 否则添加新墙壁
+                gameState.board[y][x] = 'wall';
+
+                // 确保该位置没有玩家
+                if (gameState.playerPos.x === x && gameState.playerPos.y === y) {
+                    gameState.playerPos = { x: -1, y: -1 };
+                }
+
+                // 移除该位置的箱子和目标点
+                gameState.boxes = gameState.boxes.filter(box => !(box.x === x && box.y === y));
+                gameState.targets = gameState.targets.filter(target => !(target.x === x && target.y === y));
+            }
+            break;
+
+        case 'box':
+            // 添加箱子
+            // 先检查该位置是否已有箱子
+            const existingBoxIndex = gameState.boxes.findIndex(box => box.x === x && box.y === y);
+
+            if (existingBoxIndex !== -1) {
+                // 如果已有箱子，则移除
+                gameState.boxes.splice(existingBoxIndex, 1);
+            } else {
+                // 否则添加新箱子
+                // 确保该位置没有墙壁
+                if (gameState.board[y][x] === 'wall') {
+                    gameState.board[y][x] = 'floor';
+                }
+
+                gameState.boxes.push({ x, y });
+            }
+            break;
+
+        case 'target':
+            // 添加目标点
+            // 先检查该位置是否已有目标点
+            const existingTargetIndex = gameState.targets.findIndex(target => target.x === x && target.y === y);
+
+            if (existingTargetIndex !== -1) {
+                // 如果已有目标点，则移除
+                gameState.targets.splice(existingTargetIndex, 1);
+            } else {
+                // 否则添加新目标点
+                // 确保该位置没有墙壁
+                if (gameState.board[y][x] === 'wall') {
+                    gameState.board[y][x] = 'floor';
+                }
+
+                gameState.targets.push({ x, y });
+            }
+            break;
+
+        case 'floor':
+            // 清除该位置的所有元素
+            gameState.board[y][x] = 'floor';
+            if (gameState.playerPos.x === x && gameState.playerPos.y === y) {
+                gameState.playerPos = { x: -1, y: -1 };
+            }
+            gameState.boxes = gameState.boxes.filter(box => !(box.x === x && box.y === y));
+            gameState.targets = gameState.targets.filter(target => !(target.x === x && target.y === y));
+            break;
+    }
+
+    // 重新渲染游戏
+    renderGame();
+}
+
+// 验证自定义关卡是否有效
+function validateBuiltLevel() {
+    // 检查是否有一个玩家
+    if (gameState.playerPos.x === -1 || gameState.playerPos.y === -1) {
+        alert("请放置一个玩家角色。");
+        return false;
+    }
+
+    // 检查是否至少有一个箱子和相同数量的目标点
+    if (gameState.boxes.length === 0) {
+        alert("请至少放置一个箱子。");
+        return false;
+    }
+
+    if (gameState.targets.length === 0) {
+        alert("请至少放置一个目标点。");
+        return false;
+    }
+
+    if (gameState.boxes.length !== gameState.targets.length) {
+        alert(`箱子数量(${gameState.boxes.length})与目标点数量(${gameState.targets.length})不一致。`);
+        return false;
+    }
+
+    // 检查是否有箱子被完全包围在墙壁中，这样的箱子无法移动
+    const boxesWithIssues = [];
+
+    for (const box of gameState.boxes) {
+        let surroundedByWalls = true;
+
+        // 检查四个方向
+        const directions = [
+            { dx: 0, dy: -1 }, // 上
+            { dx: 1, dy: 0 },  // 右
+            { dx: 0, dy: 1 },  // 下
+            { dx: -1, dy: 0 }  // 左
+        ];
+
+        for (const dir of directions) {
+            const nx = box.x + dir.dx;
+            const ny = box.y + dir.dy;
+
+            // 检查边界
+            if (nx < 0 || ny < 0 || nx >= config.boardSize.width || ny >= config.boardSize.height) {
+                continue;
+            }
+
+            // 如果有一个方向不是墙壁，那么箱子就不是被完全包围的
+            if (gameState.board[ny][nx] !== 'wall') {
+                surroundedByWalls = false;
+                break;
+            }
+        }
+
+        if (surroundedByWalls) {
+            boxesWithIssues.push(`(${box.x},${box.y})`);
+        }
+    }
+
+    if (boxesWithIssues.length > 0) {
+        alert(`以下位置的箱子被墙壁完全包围，无法移动: ${boxesWithIssues.join(', ')}`);
+        return false;
+    }
+
+    // 检查是否有死角（两个相邻的墙角），箱子进入后无法移出
+    // 简化版的检查，完整检查较为复杂
+
+    return true;
+}
+
+// 国际化文本
+const i18n = {
+    en: {
+        title: 'Sokoban Game',
+        levelInfo: 'Level Info',
+        minSteps: 'Min Steps:',
+        iterations: 'Iterations:',
+        wallCount: 'Wall Count:',
+        moves: 'Moves:',
+        reset: 'Reset',
+        newLevel: 'New Level',
+        undo: 'Undo',
+        aiDemo: 'AI Demo',
+        settingsBtn: 'Settings',
+        validateLevelBtn: 'Validate Level',
+        clearSceneBtn: 'Clear Scene',
+        solving: 'Solving...',
+        buildLevelValidating: 'Validating level...',
+        buildLevelSuccess: 'Level validated successfully! You can play your custom level now.',
+        buildLevelInvalid: 'Level might not be solvable!',
+        levelSolved: 'Level is solvable! Minimum box pushes: {minSteps}',
+        levelUnsolved: 'Level might not be solvable with current configuration.',
+        levelSaved: 'Level saved successfully!',
+        loadLevelSuccess: 'Level loaded successfully!',
+        loadLevelFail: 'Failed to load level.',
+        noSavedLevel: 'No saved level found.',
+        saveLevelSuccess: 'Level saved successfully!',
+        saveLevelFail: 'Failed to save level.',
+        sceneCleared: 'Scene has been cleared.',
+        confirmClearScene: 'Are you sure you want to clear the current scene?',
+        buildLevelTitle: 'Build Your Own Level',
+        buildLevelInstructions: 'Click on the grid to place walls, boxes, targets, and the player. Use the tools on the left to select what you want to place. You can change the size of the level using the dropdown menu. Validate the level to check if it is solvable. Once you are satisfied with your level, click "Confirm" to start playing.',
+        buildLevelPlayer: 'Player',
+        buildLevelWall: 'Wall',
+        buildLevelBox: 'Box',
+        buildLevelTarget: 'Target',
+        buildLevelFloor: 'Floor',
+        buildLevelCancel: 'Cancel',
+        buildLevelConfirm: 'Confirm',
+        boardSize: 'Board Size',
+        sizeChanged: 'Changing the size will reset the current level. Are you sure you want to proceed?',
+        levelValid: 'Level is solvable! Minimum box pushes: {minSteps}',
+        levelInvalid: 'Level may be unsolvable with current configuration',
+        levelValidating: 'Validating level...',
+        sceneCleared: 'Scene cleared',
+        confirmClearScene: 'Are you sure you want to clear the current scene?',
+        boxPushes: 'Box Pushes: {count}'
+    },
+    zh: {
+        title: '推箱子游戏',
+        levelInfo: '关卡信息',
+        minSteps: '最小步数:',
+        iterations: '迭代次数:',
+        wallCount: '墙壁数量:',
+        moves: '移动步数:',
+        reset: '重置',
+        newLevel: '新关卡',
+        undo: '撤销',
+        aiDemo: 'AI演示',
+        settingsBtn: '设置',
+        validateLevelBtn: '验证关卡',
+        clearSceneBtn: '清空场景',
+        solving: '求解中...',
+        buildLevelValidating: '正在验证关卡...',
+        buildLevelSuccess: '关卡验证成功！现在可以开始游玩您的自定义关卡。',
+        buildLevelInvalid: '关卡可能无法求解！',
+        levelSolved: '关卡有解！最少推箱子步数: {minSteps}',
+        levelUnsolved: '当前配置下关卡可能无解。',
+        levelSaved: '关卡保存成功！',
+        loadLevelSuccess: '关卡加载成功！',
+        loadLevelFail: '加载关卡失败。',
+        noSavedLevel: '未找到已保存的关卡。',
+        saveLevelSuccess: '关卡保存成功！',
+        saveLevelFail: '保存关卡失败。',
+        sceneCleared: '场景已清空。',
+        confirmClearScene: '确定要清空当前场景吗？',
+        buildLevelTitle: '自建关卡',
+        buildLevelInstructions: '点击网格放置墙壁、箱子、目标点和玩家。使用左侧工具选择要放置的元素。可以使用下拉菜单调整关卡大小。验证关卡以检查是否可解。当您满意自己的关卡后，点击"确认"开始游戏。',
+        buildLevelPlayer: '玩家',
+        buildLevelWall: '墙壁',
+        buildLevelBox: '箱子',
+        buildLevelTarget: '目标点',
+        buildLevelFloor: '地板',
+        buildLevelCancel: '取消',
+        buildLevelConfirm: '确认',
+        boardSize: '关卡大小',
+        sizeChanged: '改变大小将重置当前关卡。确定要继续吗？',
+        levelValid: '关卡有解！最少推箱子步数: {minSteps}',
+        levelInvalid: '当前配置下关卡可能无解',
+        levelValidating: '正在验证关卡...',
+        sceneCleared: '场景已清空',
+        confirmClearScene: '确定要清空当前场景吗？',
+        boxPushes: '推箱子次数: {count}'
+    }
+};
+
+// 尝试从本地存储加载关卡
+function tryLoadFromLocalStorage() {
+    try {
+        console.log("尝试从本地存储加载关卡");
+
+        // 尝试获取上次保存的关卡数据
+        const savedLevelData = localStorage.getItem('lastSavedLevel') || localStorage.getItem('sokobanSavedLevel');
+
+        if (!savedLevelData) {
+            console.warn("未找到已保存的关卡数据");
+            alert(getText('noSavedLevel'));
+            return false;
+        }
+
+        console.log("从本地存储找到关卡数据");
+
+        try {
+            // 解析JSON数据
+            const levelData = JSON.parse(savedLevelData);
+
+            // 加载关卡
+            const success = loadLevelFromData(levelData);
+
+            if (success) {
+                // 显示成功消息
+                alert(getText('loadLevelSuccess') + ' (从本地存储)');
+                return true;
+            }
+        } catch (parseError) {
+            console.error("解析本地存储关卡数据失败:", parseError);
+            alert(getText('loadLevelFail') + " - " + parseError.message);
+        }
+
+        return false;
+    } catch (e) {
+        console.error("从本地存储加载关卡失败:", e);
+        alert(getText('loadLevelFail'));
+        return false;
+    }
+}
+
+// 计算特定类型瓦片的数量
+function countTiles(tileType) {
+    let count = 0;
+    for (let y = 0; y < gameState.board.length; y++) {
+        for (let x = 0; x < gameState.board[y].length; x++) {
+            if (gameState.board[y][x] === tileType) {
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+// 更新玩家创建关卡的信息
+function updateBuildLevelInfo(minSteps, iterations, wallCount, boxCount) {
+    // 更新AI信息区域
+    updateAILevelInfo(minSteps, iterations, wallCount);
+
+    // 获取AI信息元素并添加箱子数量信息
+    const aiInfo = document.getElementById('ai-info');
+    if (aiInfo) {
+        // 添加箱子数量信息
+        if (currentLanguage === 'zh') {
+            aiInfo.textContent += `, 箱子数量: ${boxCount}`;
+        } else {
+            aiInfo.textContent += `, Box count: ${boxCount}`;
+        }
+    }
+
+    console.log(`已更新自建关卡信息: 最少步数=${minSteps}, 迭代次数=${iterations}, 墙壁数量=${wallCount}, 箱子数量=${boxCount}`);
+}
+
+// 清空当前场景
+function clearCurrentScene() {
+    console.log("清空当前场景");
+
+    // 初始化一个空的游戏板
+    initializeBoard();
+
+    // 清空箱子、目标点和玩家位置
+    gameState.boxes = [];
+    gameState.targets = [];
+    gameState.playerPos = { x: -1, y: -1 }; // 初始时没有玩家
+
+    // 重新渲染游戏
+    renderGame();
+
+    // 显示验证结果区域，提示已清空
+    const validationResultDiv = document.getElementById('validation-result');
+    if (validationResultDiv) {
+        validationResultDiv.textContent = getText('sceneCleared');
+        validationResultDiv.style.display = 'block';
+        validationResultDiv.style.backgroundColor = '#9b59b6'; // 紫色
+        validationResultDiv.style.color = 'white';
+
+        // 几秒后自动隐藏提示
+        setTimeout(() => {
+            validationResultDiv.style.display = 'none';
+        }, 3000);
+    }
+
+    console.log("场景已清空");
+}
+
+// 更新建造模式面板的文本
+function updateBuildModeUI() {
+    // 检查是否处于建造模式
+    if (!buildMode) return;
+
+    // 获取建造模式面板
+    const buildModePanel = document.getElementById('build-mode-panel');
+    if (!buildModePanel) return;
+
+    // 更新标题
+    const title = buildModePanel.querySelector('h2');
+    if (title) {
+        title.textContent = getText('buildLevelTitle');
+    }
+
+    // 更新说明文本
+    const instructions = buildModePanel.querySelector('p');
+    if (instructions) {
+        instructions.textContent = getText('buildLevelInstructions');
+    }
+
+    // 更新左侧标题
+    const toolsTitle = buildModePanel.querySelector('h3');
+    if (toolsTitle) {
+        toolsTitle.textContent = currentLanguage === 'zh' ? '工具选择' : 'Tool Selection';
+    }
+
+    // 更新右侧标题
+    const settingsTitle = buildModePanel.querySelectorAll('h3')[1];
+    if (settingsTitle) {
+        settingsTitle.textContent = currentLanguage === 'zh' ? '关卡设置' : 'Level Settings';
+    }
+
+    // 更新工具按钮文本
+    const playerBtn = document.getElementById('build-player');
+    const wallBtn = document.getElementById('build-wall');
+    const boxBtn = document.getElementById('build-box');
+    const targetBtn = document.getElementById('build-target');
+    const floorBtn = document.getElementById('build-floor');
+
+    if (playerBtn) {
+        const span = playerBtn.querySelector('span');
+        const text = getText('buildLevelPlayer');
+        if (span) {
+            playerBtn.innerHTML = `<span style="margin-right:5px;">${span.innerHTML}</span> ${text}`;
+        } else {
+            playerBtn.textContent = text;
+        }
+    }
+
+    if (wallBtn) {
+        const span = wallBtn.querySelector('span');
+        const text = getText('buildLevelWall');
+        if (span) {
+            wallBtn.innerHTML = `<span style="margin-right:5px;">${span.innerHTML}</span> ${text}`;
+        } else {
+            wallBtn.textContent = text;
+        }
+    }
+
+    if (boxBtn) {
+        const span = boxBtn.querySelector('span');
+        const text = getText('buildLevelBox');
+        if (span) {
+            boxBtn.innerHTML = `<span style="margin-right:5px;">${span.innerHTML}</span> ${text}`;
+        } else {
+            boxBtn.textContent = text;
+        }
+    }
+
+    if (targetBtn) {
+        const span = targetBtn.querySelector('span');
+        const text = getText('buildLevelTarget');
+        if (span) {
+            targetBtn.innerHTML = `<span style="margin-right:5px;">${span.innerHTML}</span> ${text}`;
+        } else {
+            targetBtn.textContent = text;
+        }
+    }
+
+    if (floorBtn) {
+        const span = floorBtn.querySelector('span');
+        const text = getText('buildLevelFloor');
+        if (span) {
+            floorBtn.innerHTML = `<span style="margin-right:5px;">${span.innerHTML}</span> ${text}`;
+        } else {
+            floorBtn.textContent = text;
+        }
+    }
+
+    // 更新清空场景按钮
+    const clearSceneBtn = document.getElementById('clear-scene-btn');
+    if (clearSceneBtn) {
+        clearSceneBtn.textContent = getText('clearSceneBtn');
+    }
+
+    // 更新尺寸标签
+    const sizeLabel = buildModePanel.querySelector('label');
+    if (sizeLabel) {
+        sizeLabel.textContent = getText('boardSize') + ': ';
+    }
+
+    // 更新取消和确认按钮
+    const cancelBtn = document.getElementById('build-cancel-btn');
+    const confirmBtn = document.getElementById('build-confirm-btn');
+
+    if (cancelBtn) {
+        cancelBtn.textContent = getText('buildLevelCancel');
+    }
+
+    if (confirmBtn) {
+        confirmBtn.textContent = getText('buildLevelConfirm');
+    }
 }
