@@ -32,7 +32,9 @@ const languageDict = {
         winMessage: "恭喜！你完成了当前关卡，共移动 {moves} 步，推动箱子 {pushes} 次！",
         optimalSolution: "你已达到最优解！",
         notOptimalSolution: "但你不是最优解（最少推动次数为{minSteps}），是否重新体验本关？",
-        confirmReplay: "点击'确定'重新体验，点击'取消'进入新关卡。",
+        confirmReplay: "选择你的下一步操作：",
+        replayBtn: "重来",
+        newLevelBtn: "新关卡",
         aiFailed: "AI无法找到解决方案，请尝试其他关卡。",
         aiError: "AI演示过程出错，请重试。",
         settingsTitle: "游戏设置",
@@ -59,7 +61,7 @@ const languageDict = {
         scriptError: "游戏脚本加载失败！请检查网络连接并刷新页面。",
         aiStepProgress: "AI演示：步骤 {current}/{total}",
         aiComplete: "AI成功完成了关卡，共移动 {steps} 步，推动箱子 {pushes} 次！",
-        aiReplay: "是否要重新体验当前关卡？\n点击'确定'重新体验，点击'取消'生成新关卡。",
+        aiReplay: "是否要重新体验当前关卡？",
         unknownValue: "未知",
         saveLevelSuccess: "关卡已成功保存！",
         saveLevelFail: "关卡保存失败，请重试。",
@@ -111,7 +113,9 @@ const languageDict = {
         winMessage: "Congratulations! You completed the level with {moves} moves and {pushes} box pushes!",
         optimalSolution: "You've reached the optimal solution!",
         notOptimalSolution: "But you didn't reach the optimal solution (min pushes: {minSteps}). Try again?",
-        confirmReplay: "Click 'OK' to replay, 'Cancel' for a new level.",
+        confirmReplay: "Choose your next action:",
+        replayBtn: "Replay",
+        newLevelBtn: "New Level",
         aiFailed: "AI couldn't find a solution, please try another level.",
         aiError: "AI demonstration error, please try again.",
         settingsTitle: "Game Settings",
@@ -138,7 +142,7 @@ const languageDict = {
         scriptError: "Game script loading failed! Please check your network connection and refresh the page.",
         aiStepProgress: "AI Demo: Step {current}/{total}",
         aiComplete: "AI successfully completed the level with {steps} moves and {pushes} box pushes!",
-        aiReplay: "Would you like to replay this level?\nClick 'OK' to replay, 'Cancel' for a new level.",
+        aiReplay: "Would you like to replay this level?",
         unknownValue: "Unknown",
         saveLevelSuccess: "Level has been saved successfully!",
         saveLevelFail: "Failed to save level, please try again.",
@@ -177,6 +181,170 @@ function getText(key, params = {}) {
     return text.replace(/\{(\w+)\}/g, (match, paramName) => {
         return params[paramName] !== undefined ? params[paramName] : match;
     });
+}
+
+// 自定义确认对话框
+function showCustomConfirm(message, onReplay, onNewLevel) {
+    // 创建模态框背景
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7);
+        z-index: 2000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: Arial, sans-serif;
+    `;
+
+    // 创建对话框内容
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+        background-color: #fff;
+        border-radius: 12px;
+        padding: 24px;
+        max-width: 400px;
+        width: 90%;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        text-align: center;
+        animation: slideIn 0.3s ease-out;
+    `;
+
+    // 添加动画样式
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: scale(0.8) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+    `;
+    document.head.appendChild(style);
+
+    // 创建消息文本
+    const messageDiv = document.createElement('div');
+    messageDiv.style.cssText = `
+        margin-bottom: 24px;
+        font-size: 16px;
+        line-height: 1.5;
+        color: #333;
+        white-space: pre-line;
+    `;
+    messageDiv.textContent = message;
+
+    // 创建按钮容器
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = `
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        flex-wrap: wrap;
+    `;
+
+    // 创建重来按钮
+    const replayButton = document.createElement('button');
+    replayButton.textContent = getText('replayBtn');
+    replayButton.style.cssText = `
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        min-width: 120px;
+        transition: all 0.2s ease;
+        -webkit-tap-highlight-color: transparent;
+    `;
+
+    // 创建新关卡按钮
+    const newLevelButton = document.createElement('button');
+    newLevelButton.textContent = getText('newLevelBtn');
+    newLevelButton.style.cssText = `
+        background-color: #2196F3;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        min-width: 120px;
+        transition: all 0.2s ease;
+        -webkit-tap-highlight-color: transparent;
+    `;
+
+    // 添加按钮悬停效果
+    replayButton.addEventListener('mouseenter', () => {
+        replayButton.style.backgroundColor = '#45a049';
+        replayButton.style.transform = 'translateY(-1px)';
+    });
+    replayButton.addEventListener('mouseleave', () => {
+        replayButton.style.backgroundColor = '#4CAF50';
+        replayButton.style.transform = 'translateY(0)';
+    });
+
+    newLevelButton.addEventListener('mouseenter', () => {
+        newLevelButton.style.backgroundColor = '#1976D2';
+        newLevelButton.style.transform = 'translateY(-1px)';
+    });
+    newLevelButton.addEventListener('mouseleave', () => {
+        newLevelButton.style.backgroundColor = '#2196F3';
+        newLevelButton.style.transform = 'translateY(0)';
+    });
+
+    // 添加点击事件
+    replayButton.addEventListener('click', () => {
+        document.body.removeChild(modal);
+        document.head.removeChild(style);
+        if (onReplay) onReplay();
+    });
+
+    newLevelButton.addEventListener('click', () => {
+        document.body.removeChild(modal);
+        document.head.removeChild(style);
+        if (onNewLevel) onNewLevel();
+    });
+
+    // 组装对话框
+    buttonContainer.appendChild(replayButton);
+    buttonContainer.appendChild(newLevelButton);
+    dialog.appendChild(messageDiv);
+    dialog.appendChild(buttonContainer);
+    modal.appendChild(dialog);
+
+    // 添加到页面
+    document.body.appendChild(modal);
+
+    // 点击背景关闭（可选）
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            document.body.removeChild(modal);
+            document.head.removeChild(style);
+            if (onNewLevel) onNewLevel(); // 默认选择新关卡
+        }
+    });
+
+    // ESC键关闭
+    const escHandler = (e) => {
+        if (e.key === 'Escape') {
+            document.body.removeChild(modal);
+            document.head.removeChild(style);
+            document.removeEventListener('keydown', escHandler);
+            if (onNewLevel) onNewLevel(); // 默认选择新关卡
+        }
+    };
+    document.addEventListener('keydown', escHandler);
 }
 
 // 切换语言功能
@@ -480,6 +648,9 @@ async function generateNewLevel() {
         return;
     }
 
+    // 重置胜利对话框标志
+    winDialogShown = false;
+
     gameState.boxes = [];
     gameState.targets = [];
     gameState.moves = 0;
@@ -625,6 +796,9 @@ function resetLevel() {
     if (aiDemoInProgress) {
         endAiDemo();
     }
+
+    // 重置胜利对话框标志
+    winDialogShown = false;
 
     // 重置移动次数和动画状态
     gameState.moves = 0;
@@ -830,7 +1004,10 @@ function animateStep() {
                 gameState.moves++;
 
                 // 检查是否获胜
-                if (checkWin()) {
+                if (checkWin() && !winDialogShown) {
+                    // 设置标志防止重复显示
+                    winDialogShown = true;
+
                     // 创建基本的胜利消息
                     const baseMsg = getText('winMessage', {
                         moves: gameState.moves,
@@ -839,27 +1016,39 @@ function animateStep() {
 
                     // 判断是否为最优解
                     if (gameState.boxPushes > gameState.minSolutionSteps && gameState.minSolutionSteps > 0) {
-                        // 不是最优解，弹窗选择
+                        // 不是最优解，显示自定义确认对话框
                         const notOptimalMsg = getText('notOptimalSolution', {
                             minSteps: gameState.minSolutionSteps
                         });
                         const confirmMsg = getText('confirmReplay');
 
-                        if (confirm(baseMsg + '\n' + notOptimalMsg + '\n' + confirmMsg)) {
-                            resetLevel();
-                        } else {
-                            generateNewLevel();
-                        }
+                        showCustomConfirm(
+                            baseMsg + '\n' + notOptimalMsg + '\n' + confirmMsg,
+                            () => {
+                                winDialogShown = false; // 重置标志
+                                resetLevel();
+                            },
+                            () => {
+                                winDialogShown = false; // 重置标志
+                                generateNewLevel();
+                            }
+                        );
                     } else {
                         // 最优解或无最优数据
                         const optimalMsg = gameState.minSolutionSteps > 0 ? '\n' + getText('optimalSolution') : '';
                         const confirmMsg = getText('confirmReplay');
 
-                        if (confirm(baseMsg + optimalMsg + '\n\n' + confirmMsg)) {
-                            resetLevel();
-                        } else {
-                            generateNewLevel();
-                        }
+                        showCustomConfirm(
+                            baseMsg + optimalMsg + '\n\n' + confirmMsg,
+                            () => {
+                                winDialogShown = false; // 重置标志
+                                resetLevel();
+                            },
+                            () => {
+                                winDialogShown = false; // 重置标志
+                                generateNewLevel();
+                            }
+                        );
                     }
                 } else {
                     // 恢复最终状态
@@ -1206,43 +1395,115 @@ function openSettings() {
     document.getElementById('box-prob-value').textContent = defaultSettings.boxProbability.toFixed(2);
 
     // 显示模态框
-    document.getElementById('settings-modal').style.display = 'block';
+    const modal = document.getElementById('settings-modal');
+    modal.style.display = 'block';
 
     // 添加实时更新显示值的事件监听
     setupRangeListeners();
+
+    // 移动端优化：防止背景滚动
+    if (window.innerWidth <= 768) {
+        document.body.style.overflow = 'hidden';
+    }
+
+    // 添加模态框点击外部关闭功能
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) {
+            closeSettings();
+        }
+    });
+
+    // 添加ESC键关闭功能
+    const escKeyHandler = function (e) {
+        if (e.key === 'Escape') {
+            closeSettings();
+            document.removeEventListener('keydown', escKeyHandler);
+        }
+    };
+    document.addEventListener('keydown', escKeyHandler);
+
+    // 焦点管理：聚焦到第一个可交互元素
+    setTimeout(() => {
+        const firstRange = document.getElementById('board-size-range');
+        if (firstRange) {
+            firstRange.focus();
+        }
+    }, 100);
 }
 
 // 设置范围滑块的监听器
 function setupRangeListeners() {
-    // 关卡尺寸滑块
-    document.getElementById('board-size-range').addEventListener('input', function () {
-        const size = parseInt(this.value);
-        document.getElementById('board-size-value').textContent = `${size}×${size}`;
-    });
+    // 为每个滑块添加增强的事件监听器
+    const rangeInputs = [
+        {
+            id: 'board-size-range',
+            valueId: 'board-size-value',
+            formatter: (value) => `${value}×${value}`
+        },
+        {
+            id: 'max-tries-range',
+            valueId: 'max-tries-value',
+            formatter: (value) => value
+        },
+        {
+            id: 'max-iterations-range',
+            valueId: 'max-iterations-value',
+            formatter: (value) => value
+        },
+        {
+            id: 'max-nodes-range',
+            valueId: 'max-nodes-value',
+            formatter: (value) => value
+        },
+        {
+            id: 'wall-prob-range',
+            valueId: 'wall-prob-value',
+            formatter: (value) => parseFloat(value).toFixed(2)
+        },
+        {
+            id: 'box-prob-range',
+            valueId: 'box-prob-value',
+            formatter: (value) => parseFloat(value).toFixed(2)
+        }
+    ];
 
-    // 最大尝试次数滑块
-    document.getElementById('max-tries-range').addEventListener('input', function () {
-        document.getElementById('max-tries-value').textContent = this.value;
-    });
+    rangeInputs.forEach(({ id, valueId, formatter }) => {
+        const rangeElement = document.getElementById(id);
+        const valueElement = document.getElementById(valueId);
 
-    // 最大迭代次数滑块
-    document.getElementById('max-iterations-range').addEventListener('input', function () {
-        document.getElementById('max-iterations-value').textContent = this.value;
-    });
+        if (rangeElement && valueElement) {
+            // 添加input事件监听器（实时更新）
+            rangeElement.addEventListener('input', function () {
+                valueElement.textContent = formatter(this.value);
+            });
 
-    // 最大内存节点数滑块
-    document.getElementById('max-nodes-range').addEventListener('input', function () {
-        document.getElementById('max-nodes-value').textContent = this.value;
-    });
+            // 添加change事件监听器（最终值确认）
+            rangeElement.addEventListener('change', function () {
+                valueElement.textContent = formatter(this.value);
+            });
 
-    // 墙壁生成概率滑块
-    document.getElementById('wall-prob-range').addEventListener('input', function () {
-        document.getElementById('wall-prob-value').textContent = parseFloat(this.value).toFixed(2);
-    });
+            // 移动端优化：添加触摸事件支持
+            if ('ontouchstart' in window) {
+                rangeElement.addEventListener('touchstart', function () {
+                    this.style.transform = 'scale(1.05)';
+                });
 
-    // 箱子生成概率滑块
-    document.getElementById('box-prob-range').addEventListener('input', function () {
-        document.getElementById('box-prob-value').textContent = parseFloat(this.value).toFixed(2);
+                rangeElement.addEventListener('touchend', function () {
+                    this.style.transform = 'scale(1)';
+                });
+            }
+
+            // 键盘导航支持
+            rangeElement.addEventListener('keydown', function (e) {
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
+                    e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    // 延迟更新以确保值已改变
+                    setTimeout(() => {
+                        valueElement.textContent = formatter(this.value);
+                    }, 10);
+                }
+            });
+        }
     });
 }
 
@@ -1537,6 +1798,7 @@ let aiDemoSteps = [];
 let aiDemoCurrentStep = 0;
 let aiDemoInterval = null;
 let aiDemoPaused = false;
+let winDialogShown = false; // 防止重复显示胜利对话框
 const AI_DEMO_STEP_DELAY = 300; // 演示每步延迟(毫秒)
 
 /**
@@ -1654,8 +1916,8 @@ function resumeAiDemo() {
  */
 function executeNextAiDemoStep() {
     if (aiDemoCurrentStep >= aiDemoSteps.length) {
-        // 所有步骤完成，结束演示
-        endAiDemo();
+        // 所有步骤完成，显示完成对话框
+        showAiDemoComplete();
         return;
     }
 
@@ -1719,6 +1981,36 @@ function updateAiDemoProgress() {
     const percentage = Math.floor((aiDemoCurrentStep / aiDemoSteps.length) * 100);
     aiProgressElem.textContent = ``;
     aiProgressElem.style.display = 'block';
+}
+
+/**
+ * 显示AI演示完成对话框
+ */
+function showAiDemoComplete() {
+    // 先结束AI演示状态
+    endAiDemo();
+
+    // 检查是否已经显示了胜利对话框
+    if (winDialogShown) {
+        return; // 如果已经显示了胜利对话框，就不再显示AI完成对话框
+    }
+
+    // 设置标志防止重复显示
+    winDialogShown = true;
+
+    // 显示自定义确认对话框
+    const message = getText('aiReplay');
+    showCustomConfirm(
+        message,
+        () => {
+            winDialogShown = false; // 重置标志
+            resetLevel();
+        },
+        () => {
+            winDialogShown = false; // 重置标志
+            generateNewLevel();
+        }
+    );
 }
 
 /**
@@ -2481,7 +2773,16 @@ document.addEventListener('keydown', (event) => {
 
 // 关闭设置模态框
 function closeSettings() {
-    document.getElementById('settings-modal').style.display = 'none';
+    const modal = document.getElementById('settings-modal');
+    modal.style.display = 'none';
+
+    // 移动端优化：恢复背景滚动
+    if (window.innerWidth <= 768) {
+        document.body.style.overflow = '';
+    }
+
+    // 移除事件监听器
+    modal.removeEventListener('click', closeSettings);
 }
 
 // 存储关卡功能
