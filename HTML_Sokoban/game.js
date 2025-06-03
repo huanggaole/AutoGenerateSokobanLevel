@@ -39,7 +39,7 @@ const languageDict = {
         aiError: "AI演示过程出错，请重试。",
         settingsTitle: "游戏设置",
         boardSize: "关卡尺寸",
-        boardSizeDesc: "设置关卡的宽度和高度（6×6到11×11）",
+        boardSizeDesc: "设置关卡的宽度和高度（6×6到15×15）",
         aiParams: "AI生成参数",
         maxTries: "最大生成迭代次数",
         maxTriesDesc: "设置AI生成关卡的最大尝试次数（10-100），越大生成的关卡平均来说可能更难",
@@ -90,7 +90,9 @@ const languageDict = {
         levelInvalid: "当前配置下关卡可能无解",
         levelValidating: "正在验证关卡...",
         sceneCleared: "场景已清空",
-        confirmClearScene: "确定要清空当前场景吗？"
+        confirmClearScene: "确定要清空当前场景吗？",
+        cancel: "取消",
+        confirm: "确定"
     },
     en: {
         title: "AI Generated Sokoban Levels",
@@ -122,7 +124,7 @@ const languageDict = {
         aiError: "AI demonstration error, please try again.",
         settingsTitle: "Game Settings",
         boardSize: "Board Size",
-        boardSizeDesc: "Set the width and height of the level (6×6 to 11×11)",
+        boardSizeDesc: "Set the width and height of the level (6×6 to 15×15)",
         aiParams: "AI Generation Parameters",
         maxTries: "Maximum Generation Iterations",
         maxTriesDesc: "Set the maximum number of AI level generation attempts (10-100), higher values may generate more difficult levels",
@@ -173,7 +175,9 @@ const languageDict = {
         levelInvalid: "Level may be unsolvable with current configuration",
         levelValidating: "Validating level...",
         sceneCleared: "Scene cleared",
-        confirmClearScene: "Are you sure you want to clear the current scene?"
+        confirmClearScene: "Are you sure you want to clear the current scene?",
+        cancel: "Cancel",
+        confirm: "Confirm"
     }
 };
 
@@ -443,6 +447,35 @@ function showCustomConfirm(message, onConfirm = null, onCancel = null) {
             } else if (!result && onCancel) {
                 onCancel();
             }
+        }
+    });
+}
+
+// 专门用于建造模式的确认对话框
+function showBuildModeConfirm(message, onConfirm = null, onCancel = null) {
+    return createCustomDialog({
+        message: message,
+        type: 'custom',
+        buttons: [
+            {
+                text: getText('cancel') || '取消',
+                style: 'secondary',
+                color: '#6c757d',
+                hoverColor: '#5a6268',
+                action: onCancel
+            },
+            {
+                text: getText('confirm') || '确定',
+                style: 'primary',
+                color: '#007bff',
+                hoverColor: '#0056b3',
+                action: onConfirm
+            }
+        ],
+        allowBackgroundClose: true,
+        allowEscClose: true,
+        onClose: (result) => {
+            if (result === false && onCancel) onCancel();
         }
     });
 }
@@ -1378,7 +1411,7 @@ function initCanvas() {
         let tileSize = Math.floor(availableWidth / config.boardSize.width);
 
         // 确保瓦片大小不要太小
-        const minTileSize = 20; // 最小瓦片大小
+        const minTileSize = 15; // 最小瓦片大小，支持更大地图
         const maxTileSize = 60; // 最大瓦片大小
 
         tileSize = Math.max(minTileSize, Math.min(maxTileSize, tileSize));
@@ -1465,21 +1498,10 @@ function openSettings() {
     let maxIterationsValue = defaultSettings.maxSolverIterations;
     let maxNodesValue = defaultSettings.maxNodesInMemory;
 
-    // 如果AILevelGenerator已加载，从实例中获取值
-    if (AILevelGenerator) {
-        try {
-            // 创建临时实例以获取默认值
-            const tempGenerator = new AILevelGenerator(config.boardSize.width, config.boardSize.height);
-            maxIterationsValue = tempGenerator.maxSolverIterations || defaultSettings.maxSolverIterations;
-
-            // 不再尝试创建Solver实例，直接使用存储的值或原型上的值
-            if (window.Solver) {
-                maxNodesValue = window.Solver.prototype.maxNodesInMemory || defaultSettings.maxNodesInMemory;
-            }
-        } catch (e) {
-            console.warn("无法获取当前求解器设置:", e);
-        }
-    }
+    // 直接使用defaultSettings中的值，不需要创建临时实例
+    // 因为设置已经保存在defaultSettings中了
+    maxIterationsValue = defaultSettings.maxSolverIterations;
+    maxNodesValue = defaultSettings.maxNodesInMemory;
 
     document.getElementById('max-iterations-range').value = maxIterationsValue;
     document.getElementById('max-iterations-value').textContent = maxIterationsValue;
@@ -1629,6 +1651,8 @@ function saveSettings() {
     defaultSettings.boxProbability = boxProb;
     defaultSettings.maxSolverIterations = maxIterations;
     defaultSettings.maxNodesInMemory = maxNodes;
+
+    console.log(`设置已保存: 求解器最大迭代次数=${maxIterations}, 最大内存节点数=${maxNodes}`);
 
     // 如果AILevelGenerator已加载，更新其设置
     if (AILevelGenerator) {
@@ -1790,7 +1814,7 @@ function loadSettings() {
             if (settings.wallProbability) defaultSettings.wallProbability = settings.wallProbability;
             if (settings.boxProbability) defaultSettings.boxProbability = settings.boxProbability;
 
-            console.log('已从本地存储加载设置');
+            console.log(`已从本地存储加载设置: 求解器最大迭代次数=${defaultSettings.maxSolverIterations}, 最大内存节点数=${defaultSettings.maxNodesInMemory}`);
         }
     } catch (e) {
         console.warn("无法从本地存储加载设置:", e);
@@ -2256,8 +2280,11 @@ async function solvePuzzle(state) {
         // 创建求解器实例
         const solver = new Solver(state);
 
-        // 设置更高的最大迭代次数，确保能找到解决方案
-        solver.maxIterations = 10000;
+        // 使用设置中的最大迭代次数
+        solver.maxIterations = defaultSettings.maxSolverIterations || 10000;
+        solver.maxNodesInMemory = defaultSettings.maxNodesInMemory || 15000;
+
+        console.log(`AI求解使用参数: 最大迭代次数=${solver.maxIterations}, 最大内存节点数=${solver.maxNodesInMemory}`);
 
         // 执行求解
         const result = solver.run();
@@ -3575,7 +3602,7 @@ function createBuildModeUI() {
     sizeSelect.style.outline = 'none';
 
     // 添加尺寸选项
-    for (let size = 6; size <= 11; size++) {
+    for (let size = 6; size <= 15; size++) {
         const option = document.createElement('option');
         option.value = size;
         option.textContent = `${size}×${size}`;
@@ -3591,7 +3618,10 @@ function createBuildModeUI() {
         const newSize = parseInt(this.value);
         console.log(`尺寸选择改变: ${newSize}×${newSize}`);
         // 确认是否要改变尺寸
-        showCustomConfirm(getText('sizeChanged'), () => {
+        const confirmMessage = currentLanguage === 'zh' ?
+            `确定要将关卡尺寸改为 ${newSize}×${newSize} 吗？\n超出新尺寸范围的元素将被移除。` :
+            `Are you sure you want to change the level size to ${newSize}×${newSize}?\nElements outside the new size will be removed.`;
+        showBuildModeConfirm(confirmMessage, () => {
             // 保存当前已放置的元素
             const savedElements = {
                 boxes: gameState.boxes.filter(box => box.x < newSize && box.y < newSize),
@@ -3794,11 +3824,14 @@ async function solvePuzzleWithHigherLimits(state) {
         // 创建求解器实例
         const solver = new Solver(state);
 
-        // 设置更高的最大迭代次数，确保能找到解决方案
-        solver.maxIterations = 50000; // 增加到5万次迭代
-        solver.maxNodesInMemory = 100000; // 增加内存节点数限制至10万
+        // 使用设置中参数的更高倍数，确保能找到解决方案
+        const baseIterations = defaultSettings.maxSolverIterations || 5000;
+        const baseMemory = defaultSettings.maxNodesInMemory || 15000;
 
-        console.log(`开始求解，最大迭代次数: ${solver.maxIterations}, 最大内存节点数: ${solver.maxNodesInMemory}`);
+        solver.maxIterations = Math.max(baseIterations * 10, 50000); // 至少5万次迭代
+        solver.maxNodesInMemory = Math.max(baseMemory * 6, 100000); // 至少10万内存节点
+
+        console.log(`关卡验证求解，最大迭代次数: ${solver.maxIterations}, 最大内存节点数: ${solver.maxNodesInMemory}`);
 
         // 执行求解
         const result = solver.run();
@@ -3812,7 +3845,7 @@ async function solvePuzzleWithHigherLimits(state) {
         } else {
             // 检查是因为迭代次数还是内存节点数限制导致的停止
             let limitReason = '';
-            if (solver.iterations >= solver.maxIterations) {
+            if (solver.iterNum >= solver.maxIterations) {
                 limitReason = `达到最大迭代次数${solver.maxIterations}`;
             } else {
                 limitReason = `达到最大内存节点数${solver.maxNodesInMemory}`;
