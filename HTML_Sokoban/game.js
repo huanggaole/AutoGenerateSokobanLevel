@@ -57,12 +57,14 @@ const languageDict = {
         sizeChanged: "关卡尺寸已修改，正在生成新关卡...",
         confirmReset: "确定要将所有设置恢复为默认值吗？",
         settingsReset: "设置已重置为默认值，正在生成新关卡...",
+        recommendedApplied: "✅ 已应用推荐设置！这些参数经过测试优化，能提供良好的游戏体验。",
         jsError: "js目录不存在，请确保创建了js目录并包含所有模块文件",
         scriptError: "游戏脚本加载失败！请检查网络连接并刷新页面。",
         aiStepProgress: "AI演示：步骤 {current}/{total}",
         aiComplete: "AI成功完成了关卡，共移动 {steps} 步，推动箱子 {pushes} 次！",
         aiReplay: "是否要重新体验当前关卡？",
         unknownValue: "未知",
+        levelSaved: "关卡保存成功！",
         saveLevelSuccess: "关卡已成功保存！",
         saveLevelFail: "关卡保存失败，请重试。",
         loadLevelSuccess: "关卡已成功加载！",
@@ -138,12 +140,14 @@ const languageDict = {
         sizeChanged: "Board size changed, generating a new level...",
         confirmReset: "Are you sure you want to reset all settings to default values?",
         settingsReset: "Settings have been reset to default values, generating a new level...",
+        recommendedApplied: "✅ Recommended settings applied! These parameters are optimized for the best gaming experience.",
         jsError: "js directory doesn't exist, please ensure you've created the js directory and included all module files",
         scriptError: "Game script loading failed! Please check your network connection and refresh the page.",
         aiStepProgress: "AI Demo: Step {current}/{total}",
         aiComplete: "AI successfully completed the level with {steps} moves and {pushes} box pushes!",
         aiReplay: "Would you like to replay this level?",
         unknownValue: "Unknown",
+        levelSaved: "Level saved successfully!",
         saveLevelSuccess: "Level has been saved successfully!",
         saveLevelFail: "Failed to save level, please try again.",
         loadLevelSuccess: "Level has been loaded successfully!",
@@ -183,8 +187,17 @@ function getText(key, params = {}) {
     });
 }
 
-// 自定义确认对话框
-function showCustomConfirm(message, onReplay, onNewLevel) {
+// 通用自定义弹窗系统
+function createCustomDialog(options) {
+    const {
+        message,
+        type = 'alert', // 'alert', 'confirm', 'custom'
+        buttons = [],
+        onClose = null,
+        allowBackgroundClose = true,
+        allowEscClose = true
+    } = options;
+
     // 创建模态框背景
     const modal = document.createElement('div');
     modal.style.cssText = `
@@ -214,21 +227,24 @@ function showCustomConfirm(message, onReplay, onNewLevel) {
         animation: slideIn 0.3s ease-out;
     `;
 
-    // 添加动画样式
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: scale(0.8) translateY(-20px);
+    // 添加动画样式（如果还没有）
+    if (!document.getElementById('custom-dialog-styles')) {
+        const style = document.createElement('style');
+        style.id = 'custom-dialog-styles';
+        style.textContent = `
+            @keyframes slideIn {
+                from {
+                    opacity: 0;
+                    transform: scale(0.8) translateY(-20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: scale(1) translateY(0);
+                }
             }
-            to {
-                opacity: 1;
-                transform: scale(1) translateY(0);
-            }
-        }
-    `;
-    document.head.appendChild(style);
+        `;
+        document.head.appendChild(style);
+    }
 
     // 创建消息文本
     const messageDiv = document.createElement('div');
@@ -250,75 +266,103 @@ function showCustomConfirm(message, onReplay, onNewLevel) {
         flex-wrap: wrap;
     `;
 
-    // 创建重来按钮
-    const replayButton = document.createElement('button');
-    replayButton.textContent = getText('replayBtn');
-    replayButton.style.cssText = `
-        background-color: #4CAF50;
-        color: white;
-        border: none;
-        padding: 12px 24px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 16px;
-        font-weight: 600;
-        min-width: 120px;
-        transition: all 0.2s ease;
-        -webkit-tap-highlight-color: transparent;
-    `;
+    // 关闭对话框的函数
+    const closeDialog = (result = null) => {
+        if (modal.parentNode) {
+            document.body.removeChild(modal);
+        }
+        if (onClose) onClose(result);
+    };
 
-    // 创建新关卡按钮
-    const newLevelButton = document.createElement('button');
-    newLevelButton.textContent = getText('newLevelBtn');
-    newLevelButton.style.cssText = `
-        background-color: #2196F3;
-        color: white;
-        border: none;
-        padding: 12px 24px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 16px;
-        font-weight: 600;
-        min-width: 120px;
-        transition: all 0.2s ease;
-        -webkit-tap-highlight-color: transparent;
-    `;
+    // 根据类型创建按钮
+    let dialogButtons = [];
 
-    // 添加按钮悬停效果
-    replayButton.addEventListener('mouseenter', () => {
-        replayButton.style.backgroundColor = '#45a049';
-        replayButton.style.transform = 'translateY(-1px)';
-    });
-    replayButton.addEventListener('mouseleave', () => {
-        replayButton.style.backgroundColor = '#4CAF50';
-        replayButton.style.transform = 'translateY(0)';
-    });
+    if (type === 'alert') {
+        dialogButtons = [{
+            text: '确定',
+            style: 'primary',
+            action: () => closeDialog(true)
+        }];
+    } else if (type === 'confirm') {
+        dialogButtons = [
+            {
+                text: '取消',
+                style: 'secondary',
+                action: () => closeDialog(false)
+            },
+            {
+                text: '确定',
+                style: 'primary',
+                action: () => closeDialog(true)
+            }
+        ];
+    } else if (type === 'custom' && buttons.length > 0) {
+        dialogButtons = buttons;
+    }
 
-    newLevelButton.addEventListener('mouseenter', () => {
-        newLevelButton.style.backgroundColor = '#1976D2';
-        newLevelButton.style.transform = 'translateY(-1px)';
-    });
-    newLevelButton.addEventListener('mouseleave', () => {
-        newLevelButton.style.backgroundColor = '#2196F3';
-        newLevelButton.style.transform = 'translateY(0)';
-    });
+    // 创建按钮
+    dialogButtons.forEach((buttonConfig, index) => {
+        const button = document.createElement('button');
+        button.textContent = buttonConfig.text;
 
-    // 添加点击事件
-    replayButton.addEventListener('click', () => {
-        document.body.removeChild(modal);
-        document.head.removeChild(style);
-        if (onReplay) onReplay();
-    });
+        // 设置按钮样式
+        const isPrimary = buttonConfig.style === 'primary';
+        const isSecondary = buttonConfig.style === 'secondary';
 
-    newLevelButton.addEventListener('click', () => {
-        document.body.removeChild(modal);
-        document.head.removeChild(style);
-        if (onNewLevel) onNewLevel();
+        let backgroundColor = '#6c757d'; // 默认灰色
+        let hoverColor = '#5a6268';
+
+        if (isPrimary) {
+            backgroundColor = '#4CAF50'; // 绿色
+            hoverColor = '#45a049';
+        } else if (isSecondary) {
+            backgroundColor = '#f44336'; // 红色
+            hoverColor = '#d32f2f';
+        } else if (buttonConfig.color) {
+            backgroundColor = buttonConfig.color;
+            hoverColor = buttonConfig.hoverColor || buttonConfig.color;
+        }
+
+        button.style.cssText = `
+            background-color: ${backgroundColor};
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            min-width: 120px;
+            transition: all 0.2s ease;
+            -webkit-tap-highlight-color: transparent;
+        `;
+
+        // 添加悬停效果
+        button.addEventListener('mouseenter', () => {
+            button.style.backgroundColor = hoverColor;
+            button.style.transform = 'translateY(-1px)';
+        });
+
+        button.addEventListener('mouseleave', () => {
+            button.style.backgroundColor = backgroundColor;
+            button.style.transform = 'translateY(0)';
+        });
+
+        // 添加点击事件
+        button.addEventListener('click', () => {
+            if (buttonConfig.action) {
+                // 先关闭对话框，再执行action
+                closeDialog(index);
+                buttonConfig.action();
+            } else {
+                closeDialog(index);
+            }
+        });
+
+        buttonContainer.appendChild(button);
     });
 
     // 组装对话框
-    buttonContainer.appendChild(replayButton);
-    buttonContainer.appendChild(newLevelButton);
     dialog.appendChild(messageDiv);
     dialog.appendChild(buttonContainer);
     modal.appendChild(dialog);
@@ -326,25 +370,81 @@ function showCustomConfirm(message, onReplay, onNewLevel) {
     // 添加到页面
     document.body.appendChild(modal);
 
-    // 点击背景关闭（可选）
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            document.body.removeChild(modal);
-            document.head.removeChild(style);
-            if (onNewLevel) onNewLevel(); // 默认选择新关卡
-        }
-    });
+    // 点击背景关闭
+    if (allowBackgroundClose) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeDialog(false);
+            }
+        });
+    }
 
     // ESC键关闭
-    const escHandler = (e) => {
-        if (e.key === 'Escape') {
-            document.body.removeChild(modal);
-            document.head.removeChild(style);
-            document.removeEventListener('keydown', escHandler);
-            if (onNewLevel) onNewLevel(); // 默认选择新关卡
+    if (allowEscClose) {
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                document.removeEventListener('keydown', escHandler);
+                closeDialog(false);
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+    }
+
+    return modal;
+}
+
+// 自定义Alert弹窗
+function showCustomAlert(message, onClose = null) {
+    return createCustomDialog({
+        message: message,
+        type: 'alert',
+        onClose: onClose
+    });
+}
+
+// 自定义Confirm弹窗
+function showCustomConfirm(message, onConfirm = null, onCancel = null) {
+    // 兼容原有的双参数调用方式（用于游戏胜利对话框）
+    if (typeof onConfirm === 'function' && typeof onCancel === 'function') {
+        return createCustomDialog({
+            message: message,
+            type: 'custom',
+            buttons: [
+                {
+                    text: getText('replayBtn'),
+                    style: 'primary',
+                    color: '#4CAF50',
+                    hoverColor: '#45a049',
+                    action: onConfirm
+                },
+                {
+                    text: getText('newLevelBtn'),
+                    style: 'secondary',
+                    color: '#2196F3',
+                    hoverColor: '#1976D2',
+                    action: onCancel
+                }
+            ],
+            allowBackgroundClose: true,
+            allowEscClose: true,
+            onClose: (result) => {
+                if (result === false && onCancel) onCancel();
+            }
+        });
+    }
+
+    // 标准的confirm调用方式
+    return createCustomDialog({
+        message: message,
+        type: 'confirm',
+        onClose: (result) => {
+            if (result && onConfirm) {
+                onConfirm();
+            } else if (!result && onCancel) {
+                onCancel();
+            }
         }
-    };
-    document.addEventListener('keydown', escHandler);
+    });
 }
 
 // 切换语言功能
@@ -1577,16 +1677,16 @@ function saveSettings() {
         });
 
         // 提示用户设置已保存并应用
-        alert('关卡尺寸已修改，正在生成新关卡...');
+        showCustomAlert(getText('sizeChanged'));
     } else {
         // 提示用户设置已保存
-        alert('设置已保存，生成新关卡时将应用新设置');
+        showCustomAlert(getText('settingsSaved'));
     }
 }
 
 // 重置设置为默认值
 function resetSettings() {
-    if (confirm('确定要将所有设置恢复为默认值吗？')) {
+    showCustomConfirm(getText('confirmReset'), () => {
         // 检查尺寸是否发生变化
         const sizeChanged = config.boardSize.width !== defaultSettings.boardSize.width ||
             config.boardSize.height !== defaultSettings.boardSize.height;
@@ -1630,9 +1730,46 @@ function resetSettings() {
             });
 
             // 提示用户设置已重置并应用
-            alert('设置已重置为默认值，正在生成新关卡...');
+            showCustomAlert(getText('settingsReset'));
         }
-    }
+    });
+}
+
+// 应用推荐设置
+function applyRecommendedSettings() {
+    const message = `推荐设置基于测试优化，平衡了性能和关卡质量：
+
+🎯 关卡尺寸: 8×8 (适中复杂度)
+🤖 最大尝试次数: 40 (良好质量/时间平衡)
+🧠 最大迭代次数: 8000 (高成功率)
+💾 最大内存节点数: 18000 (平衡内存和成功率)
+🧱 墙壁概率: 0.28 (适中密度)
+📦 箱子概率: 0.22 (适中难度)
+
+是否应用这些推荐设置？`;
+
+    showCustomConfirm(message, () => {
+        // 应用推荐设置
+        document.getElementById('board-size-range').value = 8;
+        document.getElementById('board-size-value').textContent = '8×8';
+
+        document.getElementById('max-tries-range').value = 40;
+        document.getElementById('max-tries-value').textContent = '40';
+
+        document.getElementById('max-iterations-range').value = 8000;
+        document.getElementById('max-iterations-value').textContent = '8000';
+
+        document.getElementById('max-nodes-range').value = 18000;
+        document.getElementById('max-nodes-value').textContent = '18000';
+
+        document.getElementById('wall-prob-range').value = 0.28;
+        document.getElementById('wall-prob-value').textContent = '0.28';
+
+        document.getElementById('box-prob-range').value = 0.22;
+        document.getElementById('box-prob-value').textContent = '0.22';
+
+        showCustomAlert(getText('recommendedApplied'));
+    });
 }
 
 // 从本地存储加载设置
@@ -1739,7 +1876,7 @@ async function initGame() {
         // 将游戏状态预渲染到屏幕上 - 开始游戏循环
         window.requestAnimationFrame(gameLoop);
     } else {
-        alert('图片加载失败，请刷新页面重试');
+        showCustomAlert('图片加载失败，请刷新页面重试');
     }
 }
 
@@ -1761,7 +1898,7 @@ function displayErrorMessage(message) {
             }
         }, 0);
     } else {
-        alert(message);
+        showCustomAlert(message);
     }
 }
 
@@ -1849,7 +1986,7 @@ async function aiDemonstration() {
         const solution = await solvePuzzle(solverState);
         if (!solution || solution.length === 0) {
             console.error('未找到解决方案');
-            alert('AI无法找到解决方案，请尝试其他关卡。');
+            showCustomAlert('AI无法找到解决方案，请尝试其他关卡。');
             endAiDemo();
             return;
         }
@@ -1861,7 +1998,7 @@ async function aiDemonstration() {
         aiDemoInterval = setInterval(executeNextAiDemoStep, AI_DEMO_STEP_DELAY);
     } catch (error) {
         console.error('AI演示求解过程出错:', error);
-        alert('AI演示过程出错，请重试。');
+        showCustomAlert('AI演示过程出错，请重试。');
         endAiDemo();
     }
 }
@@ -1905,7 +2042,7 @@ function resumeAiDemo() {
     // 更新按钮文本
     const demoBtn = document.getElementById('ai-demo-btn');
     if (demoBtn) {
-        demoBtn.textContent = getText('resumeBtn');
+        demoBtn.textContent = getText('pauseBtn');
     }
 
     console.log('AI演示已继续');
@@ -2848,7 +2985,7 @@ window.saveLevel = function () {
         console.error('无法保存关卡到本地存储:', e);
     }
 
-    alert(getText('levelSaved'));
+    showCustomAlert(getText('levelSaved'));
 };
 
 // 加载关卡功能
@@ -2884,19 +3021,19 @@ window.loadLevel = function () {
 
                 if (success) {
                     // 显示成功消息
-                    alert(getText('loadLevelSuccess'));
+                    showCustomAlert(getText('loadLevelSuccess'));
                 }
             } catch (error) {
                 console.error("解析关卡数据失败:", error);
                 console.error("错误详情:", error.message);
                 console.error("文件内容片段:", e.target.result.substring(0, 200));
-                alert(getText('loadLevelFail') + "\n错误信息: " + error.message);
+                showCustomAlert(getText('loadLevelFail') + "\n错误信息: " + error.message);
             }
         };
 
         reader.onerror = function (error) {
             console.error("读取文件失败:", error);
-            alert(getText('loadLevelFail') + "\n读取文件错误");
+            showCustomAlert(getText('loadLevelFail') + "\n读取文件错误");
         };
 
         // 读取文件内容
@@ -2920,7 +3057,7 @@ function loadLevelFromData(levelData) {
     // 检查关卡数据的有效性
     if (!levelData) {
         console.error("无效的关卡数据: 数据为空");
-        alert("无效的关卡数据: 数据为空");
+        showCustomAlert("无效的关卡数据: 数据为空");
         return false;
     }
 
@@ -2943,25 +3080,25 @@ function loadLevelFromData(levelData) {
 
         if (!width || !height) {
             console.error("无效的关卡数据: 缺少尺寸信息");
-            alert("无效的关卡数据: 缺少棋盘尺寸信息");
+            showCustomAlert("无效的关卡数据: 缺少棋盘尺寸信息");
             return false;
         }
 
         if (!player || typeof player.x !== 'number' || typeof player.y !== 'number') {
             console.error("无效的关卡数据: 缺少有效的玩家位置");
-            alert("无效的关卡数据: 缺少有效的玩家位置");
+            showCustomAlert("无效的关卡数据: 缺少有效的玩家位置");
             return false;
         }
 
         if (!Array.isArray(boxes) || boxes.length === 0) {
             console.error("无效的关卡数据: 缺少箱子数据");
-            alert("无效的关卡数据: 缺少箱子数据");
+            showCustomAlert("无效的关卡数据: 缺少箱子数据");
             return false;
         }
 
         if (!Array.isArray(targets) || targets.length === 0) {
             console.error("无效的关卡数据: 缺少目标点数据");
-            alert("无效的关卡数据: 缺少目标点数据");
+            showCustomAlert("无效的关卡数据: 缺少目标点数据");
             return false;
         }
 
@@ -3039,7 +3176,7 @@ function loadLevelFromData(levelData) {
         return true;
     } catch (error) {
         console.error("加载关卡数据过程中发生错误:", error);
-        alert("加载关卡数据失败: " + error.message);
+        showCustomAlert("加载关卡数据失败: " + error.message);
         return false;
     }
 }
@@ -3187,7 +3324,7 @@ window.buildLevel = function () {
         updateBuildLevelInfo(0, 1, wallCount, boxCount);
 
         // 显示成功消息
-        alert(getText('buildLevelSuccess'));
+        showCustomAlert(getText('buildLevelSuccess'));
 
         // 添加自定义标记，显示这是玩家创建的关卡
         const aiInfo = document.getElementById('ai-info');
@@ -3391,9 +3528,9 @@ function createBuildModeUI() {
     // 绑定点击事件
     clearSceneButton.onclick = function () {
         console.log("点击了清空场景按钮");
-        if (confirm(getText('confirmClearScene'))) {
+        showCustomConfirm(getText('confirmClearScene'), () => {
             clearCurrentScene();
-        }
+        });
     };
 
     leftColumn.appendChild(clearSceneButton);
@@ -3438,7 +3575,7 @@ function createBuildModeUI() {
     sizeSelect.style.outline = 'none';
 
     // 添加尺寸选项
-    for (let size = 6; size <= 15; size++) {
+    for (let size = 6; size <= 11; size++) {
         const option = document.createElement('option');
         option.value = size;
         option.textContent = `${size}×${size}`;
@@ -3454,7 +3591,7 @@ function createBuildModeUI() {
         const newSize = parseInt(this.value);
         console.log(`尺寸选择改变: ${newSize}×${newSize}`);
         // 确认是否要改变尺寸
-        if (confirm(getText('sizeChanged'))) {
+        showCustomConfirm(getText('sizeChanged'), () => {
             // 保存当前已放置的元素
             const savedElements = {
                 boxes: gameState.boxes.filter(box => box.x < newSize && box.y < newSize),
@@ -3481,15 +3618,15 @@ function createBuildModeUI() {
             // 重新渲染
             renderGame();
             console.log(`已更改尺寸为 ${newSize}×${newSize}`);
-        } else {
-            // 还原选择
+        }, () => {
+            // 取消时还原选择
             for (let i = 0; i < sizeSelect.options.length; i++) {
                 if (parseInt(sizeSelect.options[i].value) === config.boardSize.width) {
                     sizeSelect.selectedIndex = i;
                     break;
                 }
             }
-        }
+        });
     });
 
     sizeControl.appendChild(sizeSelect);
@@ -3833,23 +3970,23 @@ function handleBuildModeClick(event) {
 function validateBuiltLevel() {
     // 检查是否有一个玩家
     if (gameState.playerPos.x === -1 || gameState.playerPos.y === -1) {
-        alert("请放置一个玩家角色。");
+        showCustomAlert("请放置一个玩家角色。");
         return false;
     }
 
     // 检查是否至少有一个箱子和相同数量的目标点
     if (gameState.boxes.length === 0) {
-        alert("请至少放置一个箱子。");
+        showCustomAlert("请至少放置一个箱子。");
         return false;
     }
 
     if (gameState.targets.length === 0) {
-        alert("请至少放置一个目标点。");
+        showCustomAlert("请至少放置一个目标点。");
         return false;
     }
 
     if (gameState.boxes.length !== gameState.targets.length) {
-        alert(`箱子数量(${gameState.boxes.length})与目标点数量(${gameState.targets.length})不一致。`);
+        showCustomAlert(`箱子数量(${gameState.boxes.length})与目标点数量(${gameState.targets.length})不一致。`);
         return false;
     }
 
@@ -3889,7 +4026,7 @@ function validateBuiltLevel() {
     }
 
     if (boxesWithIssues.length > 0) {
-        alert(`以下位置的箱子被墙壁完全包围，无法移动: ${boxesWithIssues.join(', ')}`);
+        showCustomAlert(`以下位置的箱子被墙壁完全包围，无法移动: ${boxesWithIssues.join(', ')}`);
         return false;
     }
 
@@ -3899,101 +4036,7 @@ function validateBuiltLevel() {
     return true;
 }
 
-// 国际化文本
-const i18n = {
-    en: {
-        title: 'Sokoban Game',
-        levelInfo: 'Level Info',
-        minSteps: 'Min Steps:',
-        iterations: 'Iterations:',
-        wallCount: 'Wall Count:',
-        moves: 'Moves:',
-        reset: 'Reset',
-        newLevel: 'New Level',
-        undo: 'Undo',
-        aiDemo: 'AI Demo',
-        settingsBtn: 'Settings',
-        validateLevelBtn: 'Validate Level',
-        clearSceneBtn: 'Clear Scene',
-        solving: 'Solving...',
-        buildLevelValidating: 'Validating level...',
-        buildLevelSuccess: 'Level validated successfully! You can play your custom level now.',
-        buildLevelInvalid: 'Level might not be solvable!',
-        levelSolved: 'Level is solvable! Minimum box pushes: {minSteps}',
-        levelUnsolved: 'Level might not be solvable with current configuration.',
-        levelSaved: 'Level saved successfully!',
-        loadLevelSuccess: 'Level loaded successfully!',
-        loadLevelFail: 'Failed to load level.',
-        noSavedLevel: 'No saved level found.',
-        saveLevelSuccess: 'Level saved successfully!',
-        saveLevelFail: 'Failed to save level.',
-        sceneCleared: 'Scene has been cleared.',
-        confirmClearScene: 'Are you sure you want to clear the current scene?',
-        buildLevelTitle: 'Build Your Own Level',
-        buildLevelInstructions: 'Click on the grid to place walls, boxes, targets, and the player. Use the tools on the left to select what you want to place. You can change the size of the level using the dropdown menu. Validate the level to check if it is solvable. Once you are satisfied with your level, click "Confirm" to start playing.',
-        buildLevelPlayer: 'Player',
-        buildLevelWall: 'Wall',
-        buildLevelBox: 'Box',
-        buildLevelTarget: 'Target',
-        buildLevelFloor: 'Floor',
-        buildLevelCancel: 'Cancel',
-        buildLevelConfirm: 'Confirm',
-        boardSize: 'Board Size',
-        sizeChanged: 'Changing the size will reset the current level. Are you sure you want to proceed?',
-        levelValid: 'Level is solvable! Minimum box pushes: {minSteps}',
-        levelInvalid: 'Level may be unsolvable with current configuration',
-        levelValidating: 'Validating level...',
-        sceneCleared: 'Scene cleared',
-        confirmClearScene: 'Are you sure you want to clear the current scene?',
-        boxPushes: 'Box Pushes: {count}'
-    },
-    zh: {
-        title: '推箱子游戏',
-        levelInfo: '关卡信息',
-        minSteps: '最小步数:',
-        iterations: '迭代次数:',
-        wallCount: '墙壁数量:',
-        moves: '移动步数:',
-        reset: '重置',
-        newLevel: '新关卡',
-        undo: '撤销',
-        aiDemo: 'AI演示',
-        settingsBtn: '设置',
-        validateLevelBtn: '验证关卡',
-        clearSceneBtn: '清空场景',
-        solving: '求解中...',
-        buildLevelValidating: '正在验证关卡...',
-        buildLevelSuccess: '关卡验证成功！现在可以开始游玩您的自定义关卡。',
-        buildLevelInvalid: '关卡可能无法求解！',
-        levelSolved: '关卡有解！最少推箱子步数: {minSteps}',
-        levelUnsolved: '当前配置下关卡可能无解。',
-        levelSaved: '关卡保存成功！',
-        loadLevelSuccess: '关卡加载成功！',
-        loadLevelFail: '加载关卡失败。',
-        noSavedLevel: '未找到已保存的关卡。',
-        saveLevelSuccess: '关卡保存成功！',
-        saveLevelFail: '保存关卡失败。',
-        sceneCleared: '场景已清空。',
-        confirmClearScene: '确定要清空当前场景吗？',
-        buildLevelTitle: '自建关卡',
-        buildLevelInstructions: '点击网格放置墙壁、箱子、目标点和玩家。使用左侧工具选择要放置的元素。可以使用下拉菜单调整关卡大小。验证关卡以检查是否可解。当您满意自己的关卡后，点击"确认"开始游戏。',
-        buildLevelPlayer: '玩家',
-        buildLevelWall: '墙壁',
-        buildLevelBox: '箱子',
-        buildLevelTarget: '目标点',
-        buildLevelFloor: '地板',
-        buildLevelCancel: '取消',
-        buildLevelConfirm: '确认',
-        boardSize: '关卡大小',
-        sizeChanged: '改变大小将重置当前关卡。确定要继续吗？',
-        levelValid: '关卡有解！最少推箱子步数: {minSteps}',
-        levelInvalid: '当前配置下关卡可能无解',
-        levelValidating: '正在验证关卡...',
-        sceneCleared: '场景已清空',
-        confirmClearScene: '确定要清空当前场景吗？',
-        boxPushes: '推箱子次数: {count}'
-    }
-};
+
 
 // 尝试从本地存储加载关卡
 function tryLoadFromLocalStorage() {
@@ -4005,7 +4048,7 @@ function tryLoadFromLocalStorage() {
 
         if (!savedLevelData) {
             console.warn("未找到已保存的关卡数据");
-            alert(getText('noSavedLevel'));
+            showCustomAlert(getText('noSavedLevel'));
             return false;
         }
 
@@ -4020,18 +4063,18 @@ function tryLoadFromLocalStorage() {
 
             if (success) {
                 // 显示成功消息
-                alert(getText('loadLevelSuccess') + ' (从本地存储)');
+                showCustomAlert(getText('loadLevelSuccess') + ' (从本地存储)');
                 return true;
             }
         } catch (parseError) {
             console.error("解析本地存储关卡数据失败:", parseError);
-            alert(getText('loadLevelFail') + " - " + parseError.message);
+            showCustomAlert(getText('loadLevelFail') + " - " + parseError.message);
         }
 
         return false;
     } catch (e) {
         console.error("从本地存储加载关卡失败:", e);
-        alert(getText('loadLevelFail'));
+        showCustomAlert(getText('loadLevelFail'));
         return false;
     }
 }
