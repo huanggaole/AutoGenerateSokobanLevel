@@ -657,7 +657,7 @@
     <div id="settings-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>游戏设置</h2>
+                <h2>游戏设置 <span style="font-size: 0.7em; color: #4CAF50; font-weight: normal;">(v3.0 智能算法)</span></h2>
                 <span class="close-btn" onclick="closeSettings()">&times;</span>
             </div>
             <div class="modal-body">
@@ -674,7 +674,8 @@
                 </div>
 
                 <div class="setting-group">
-                    <div class="setting-label">AI生成参数</div>
+                    <div class="setting-label">AI生成参数 <span style="font-size: 0.8em; color: #666;">- 多维度质量评估 +
+                            智能分布算法</span></div>
                     <div class="setting-item">
                         <div class="setting-label">最大生成迭代次数</div>
                         <div class="range-container">
@@ -703,22 +704,22 @@
                         <div class="setting-description">设置求解器的最大内存节点数（10000-500000），更高值允许更深搜索但占用更多内存</div>
                     </div>
                     <div class="setting-item">
-                        <div class="setting-label">墙壁生成概率</div>
+                        <div class="setting-label">智能墙壁生成触发概率</div>
                         <div class="range-container">
                             <input type="range" id="wall-prob-range" class="range-input setting-input" min="0.15"
-                                max="0.45" step="0.05" value="0.30">
-                            <span id="wall-prob-value" class="range-value">0.30</span>
+                                max="0.45" step="0.01" value="0.32">
+                            <span id="wall-prob-value" class="range-value">0.32</span>
                         </div>
-                        <div class="setting-description">设置生成墙壁的概率（0.15-0.45），越高关卡越复杂，推荐0.25-0.35</div>
+                        <div class="setting-description">触发策略性墙壁放置的概率（0.15-0.45），结合通道连通性分析，越高关卡结构越复杂</div>
                     </div>
                     <div class="setting-item">
-                        <div class="setting-label">箱子生成概率</div>
+                        <div class="setting-label">智能箱子生成触发概率</div>
                         <div class="range-container">
                             <input type="range" id="box-prob-range" class="range-input setting-input" min="0.15"
-                                max="0.30" step="0.05" value="0.20">
-                            <span id="box-prob-value" class="range-value">0.20</span>
+                                max="0.35" step="0.01" value="0.22">
+                            <span id="box-prob-value" class="range-value">0.22</span>
                         </div>
-                        <div class="setting-description">设置生成箱子和目标点的概率（0.15-0.30），影响关卡难度和可解性，推荐0.18-0.25</div>
+                        <div class="setting-description">触发箱子/目标生成的概率（0.15-0.35），结合空间分布优化，影响关卡难度和平衡性</div>
                     </div>
                 </div>
             </div>

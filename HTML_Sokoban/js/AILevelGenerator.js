@@ -3,6 +3,8 @@
 import { GenerateLevel, TileType, Direction } from './GenerateLevel.js';
 import { State } from './State.js';
 import { Solver } from './Solver.js';
+import { LevelQualityEvaluator } from './LevelQualityEvaluator.js';
+import { ProgressiveFallbackGenerator } from './ProgressiveFallbackGenerator.js';
 
 /**
  * AI关卡生成器类
@@ -42,6 +44,12 @@ class AILevelGenerator {
 
         // 动态计算参数（基于地图尺寸和配置）
         this.calculateDynamicParameters();
+
+        // 初始化质量评估器
+        this.qualityEvaluator = new LevelQualityEvaluator(width, height, 'medium');
+
+        // 初始化渐进式回退生成器
+        this.fallbackGenerator = new ProgressiveFallbackGenerator(width, height, options);
 
         // 记录一下初始化参数，方便调试
         console.log(`AI关卡生成器初始化: 尺寸=${width}x${height}, 最大求解迭代=${this.maxSolverIterations}, 最大节点数=${this.maxNodesInMemory}`);
@@ -108,32 +116,53 @@ class AILevelGenerator {
                 try {
                     // 检查是否超时
                     if (Date.now() - startTime > this.maxGenerationTime) {
-                        console.log("生成关卡超时，返回最佳或回退方案");
-                        if (bestLevel && bestSteps >= 10) {
+                        console.log("生成关卡超时，使用智能回退策略");
+                        const timeRemaining = Math.max(0, this.maxGenerationTime - (Date.now() - startTime) + 1000);
+
+                        if (bestLevel && (bestLevel.qualityScore >= 0.5 || bestSteps >= 10)) {
+                            // 返回找到的最佳关卡
                             resolve({
                                 success: true,
                                 level: bestLevel,
                                 minSteps: bestSteps,
                                 iterations: this.iterationCount,
-                                wallCount: bestLevel.wallCount
+                                wallCount: bestLevel.wallCount,
+                                qualityScore: bestLevel.qualityScore,
+                                qualityLevel: bestLevel.qualityLevel,
+                                source: 'best_found'
                             });
                         } else if (hasValidLevel) {
+                            // 返回当前有效关卡
                             const gameLevel = this.convertToGameFormat();
+                            const finalQuality = this.qualityEvaluator.evaluateLevel(this.generatedLevel, [], this.wallCount);
                             resolve({
                                 success: true,
                                 level: gameLevel,
                                 minSteps: this.minSteps,
                                 iterations: this.iterationCount,
-                                wallCount: gameLevel.wallCount
+                                wallCount: gameLevel.wallCount,
+                                qualityScore: finalQuality.score,
+                                qualityLevel: finalQuality.qualityLevel,
+                                source: 'current_valid'
                             });
                         } else {
-                            const fallbackLevel = this.generateSimpleFallbackLevel();
+                            // 使用渐进式回退生成器
+                            const targetComplexity = bestLevel ? Math.max(0.4, bestLevel.qualityScore || 0.4) : 0.6;
+                            const fallbackResult = this.fallbackGenerator.generateFallbackLevel(
+                                targetComplexity,
+                                [], // 暂时不传递尝试历史
+                                timeRemaining
+                            );
                             resolve({
                                 success: true,
-                                level: fallbackLevel,
-                                minSteps: 5, // 简单关卡的估计步数
+                                level: fallbackResult.level,
+                                minSteps: fallbackResult.minSteps,
                                 iterations: this.iterationCount,
-                                wallCount: 0 // 简易关卡默认无墙
+                                wallCount: fallbackResult.wallCount,
+                                qualityScore: fallbackResult.complexity,
+                                qualityLevel: 'fallback',
+                                source: 'progressive_fallback',
+                                fallbackInfo: fallbackResult.fallbackLevel
                             });
                         }
                         return;
@@ -253,31 +282,61 @@ class AILevelGenerator {
 
                         hasValidLevel = true;
 
-                        // 如果当前关卡比之前找到的任何关卡更好，则记住它
-                        if (this.minSteps > bestSteps || (this.minSteps === bestSteps && this.wallCount > (bestLevel?.wallCount || 0))) {
+                        // 使用新的质量评估系统
+                        const currentLevel = this.convertToGameFormat();
+                        const qualityResult = this.qualityEvaluator.evaluateLevel(
+                            this.generatedLevel,
+                            solver.steplist,
+                            this.wallCount
+                        );
+
+                        console.log(`关卡质量评估: 得分=${qualityResult.score.toFixed(3)}, 等级=${qualityResult.qualityLevel}`);
+                        console.log(`质量指标: 步数复杂度=${qualityResult.metrics.stepComplexity?.toFixed(3)}, 空间分布=${qualityResult.metrics.spatialDistribution?.toFixed(3)}`);
+
+                        // 检查是否找到了更好的关卡（基于综合质量评分）
+                        const currentQualityScore = qualityResult.score;
+                        const previousBestScore = bestLevel?.qualityScore || 0;
+
+                        if (!bestLevel || currentQualityScore > previousBestScore ||
+                            (Math.abs(currentQualityScore - previousBestScore) < 0.1 && this.minSteps > bestSteps)) {
                             bestSteps = this.minSteps;
-                            // 创建关卡时确保包含墙壁数量
-                            const currentLevel = this.convertToGameFormat();
                             bestLevel = currentLevel;
-                            console.log(`找到更好的关卡: 步数=${bestSteps}, 墙壁=${currentLevel.wallCount}`);
+                            bestLevel.qualityScore = currentQualityScore;
+                            bestLevel.qualityLevel = qualityResult.qualityLevel;
+                            bestLevel.qualityMetrics = qualityResult.metrics;
+                            console.log(`发现更好的关卡，质量得分: ${currentQualityScore.toFixed(3)}，步数: ${bestSteps}，墙壁数: ${this.wallCount}`);
                         }
 
-                        // 只有在以下条件全部满足时才考虑提前结束：
-                        // 1. 步骤数足够多（>=15）
-                        // 2. 已经迭代足够多次（>=30）
-                        // 3. 墙壁数量在合理范围（使用动态阈值）
-                        // 4. 不再强制继续迭代
-                        if (this.minSteps >= 20 && this.iterationCount >= 30 &&
-                            this.wallCount >= this.minWallThreshold && this.wallCount <= this.maxWallThreshold &&
-                            !forceMoreIterations) {
-                            const finalLevel = this.convertToGameFormat();
-                            console.log(`提前退出 - 步数: ${this.minSteps}, 墙壁: ${finalLevel.wallCount}`);
+                        // 基于质量评估的提前结束条件
+                        if (qualityResult.isHighQuality && this.iterationCount >= 20 && !forceMoreIterations) {
+                            console.log(`找到高质量关卡，提前结束生成。质量得分: ${currentQualityScore.toFixed(3)}，步数: ${this.minSteps}，迭代次数: ${this.iterationCount}`);
                             resolve({
                                 success: true,
-                                level: finalLevel,
+                                level: currentLevel,
                                 minSteps: this.minSteps,
                                 iterations: this.iterationCount,
-                                wallCount: finalLevel.wallCount
+                                wallCount: this.wallCount,
+                                qualityScore: currentQualityScore,
+                                qualityLevel: qualityResult.qualityLevel,
+                                qualityMetrics: qualityResult.metrics
+                            });
+                            return;
+                        }
+
+                        // 备用提前结束条件（基于传统指标）
+                        if (this.minSteps >= 20 && this.iterationCount >= 40 &&
+                            this.wallCount >= this.minWallThreshold && this.wallCount <= this.maxWallThreshold &&
+                            qualityResult.isAcceptable && !forceMoreIterations) {
+                            console.log(`达到可接受质量标准，提前退出 - 步数: ${this.minSteps}, 墙壁: ${this.wallCount}, 质量得分: ${currentQualityScore.toFixed(3)}`);
+                            resolve({
+                                success: true,
+                                level: currentLevel,
+                                minSteps: this.minSteps,
+                                iterations: this.iterationCount,
+                                wallCount: this.wallCount,
+                                qualityScore: currentQualityScore,
+                                qualityLevel: qualityResult.qualityLevel,
+                                qualityMetrics: qualityResult.metrics
                             });
                             return;
                         }
@@ -297,50 +356,97 @@ class AILevelGenerator {
                         });
                     } else {
                         // 达到最大尝试次数，返回最佳结果或当前结果
-                        if (bestLevel && bestSteps >= 10) {
+                        if (bestLevel && (bestLevel.qualityScore >= 0.5 || bestSteps >= 10)) {
                             // 使用找到的最佳关卡
-                            console.log(`返回最佳关卡，步数: ${bestSteps}，墙壁数: ${bestLevel.wallCount}`);
+                            console.log(`返回最佳关卡，质量得分: ${bestLevel.qualityScore?.toFixed(3) || 'N/A'}，步数: ${bestSteps}，墙壁数: ${bestLevel.wallCount}`);
                             resolve({
                                 success: true,
                                 level: bestLevel,
                                 minSteps: bestSteps,
                                 iterations: this.iterationCount,
-                                wallCount: bestLevel.wallCount
+                                wallCount: bestLevel.wallCount,
+                                qualityScore: bestLevel.qualityScore,
+                                qualityLevel: bestLevel.qualityLevel,
+                                qualityMetrics: bestLevel.qualityMetrics
                             });
                         } else if (hasValidLevel) {
                             const gameLevel = this.convertToGameFormat();
+                            // 对当前关卡进行最终质量评估
+                            const finalQualityResult = this.qualityEvaluator.evaluateLevel(
+                                this.generatedLevel,
+                                [], // 没有解法步骤信息
+                                this.wallCount
+                            );
                             resolve({
                                 success: true,
                                 level: gameLevel,
                                 minSteps: this.minSteps,
                                 iterations: this.iterationCount,
-                                wallCount: gameLevel.wallCount
+                                wallCount: gameLevel.wallCount,
+                                qualityScore: finalQualityResult.score,
+                                qualityLevel: finalQualityResult.qualityLevel,
+                                qualityMetrics: finalQualityResult.metrics
                             });
                         } else {
-                            // 全部尝试失败，生成简单的回退关卡
-                            const fallbackLevel = this.generateSimpleFallbackLevel();
-                            console.log("生成回退关卡");
+                            // 全部尝试失败，使用渐进式回退生成器
+                            console.log("所有尝试失败，使用渐进式回退生成器");
+                            const targetComplexity = bestLevel ? Math.max(0.3, bestLevel.qualityScore || 0.3) : 0.5;
+                            const fallbackResult = this.fallbackGenerator.generateFallbackLevel(
+                                targetComplexity,
+                                [], // 暂时不传递尝试历史
+                                1000 // 给回退生成器1秒时间
+                            );
                             resolve({
                                 success: true,
-                                level: fallbackLevel,
-                                minSteps: 5,
+                                level: fallbackResult.level,
+                                minSteps: fallbackResult.minSteps,
                                 iterations: this.iterationCount,
-                                wallCount: 0
+                                wallCount: fallbackResult.wallCount,
+                                qualityScore: fallbackResult.complexity,
+                                qualityLevel: 'fallback',
+                                source: 'progressive_fallback_final',
+                                fallbackInfo: fallbackResult.fallbackLevel
                             });
                         }
                     }
                 } catch (error) {
                     console.error("生成关卡时出错:", error);
-                    // 出错时返回简单的回退关卡
-                    const fallbackLevel = this.generateSimpleFallbackLevel();
-                    resolve({
-                        success: true,
-                        level: fallbackLevel,
-                        minSteps: 5,
-                        iterations: this.iterationCount,
-                        error: error.toString(),
-                        wallCount: 0
-                    });
+                    // 出错时使用渐进式回退生成器
+                    try {
+                        const fallbackResult = this.fallbackGenerator.generateFallbackLevel(
+                            0.4, // 中等复杂度
+                            [],
+                            500 // 紧急情况下给500ms
+                        );
+                        resolve({
+                            success: true,
+                            level: fallbackResult.level,
+                            minSteps: fallbackResult.minSteps,
+                            iterations: this.iterationCount,
+                            wallCount: fallbackResult.wallCount,
+                            qualityScore: fallbackResult.complexity,
+                            qualityLevel: 'fallback',
+                            source: 'error_fallback',
+                            error: error.toString(),
+                            fallbackInfo: fallbackResult.fallbackLevel
+                        });
+                    } catch (fallbackError) {
+                        console.error("回退生成器也失败:", fallbackError);
+                        // 最后的保险：使用原始简单生成
+                        const simpleFallback = this.generateSimpleFallbackLevel();
+                        resolve({
+                            success: true,
+                            level: simpleFallback,
+                            minSteps: 5,
+                            iterations: this.iterationCount,
+                            wallCount: 0,
+                            qualityScore: 0.1,
+                            qualityLevel: 'minimal',
+                            source: 'emergency_fallback',
+                            error: error.toString(),
+                            fallbackError: fallbackError.toString()
+                        });
+                    }
                 }
             };
 

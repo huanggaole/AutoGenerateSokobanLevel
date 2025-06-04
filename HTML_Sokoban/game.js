@@ -47,10 +47,10 @@ const languageDict = {
         maxIterationsDesc: "设置求解器的最大迭代次数（5000-200000），更高值可解决更复杂关卡但耗时更长",
         maxNodes: "求解器最大内存节点数",
         maxNodesDesc: "设置求解器的最大内存节点数（10000-500000），更高值允许更深搜索但占用更多内存",
-        wallProb: "墙壁生成概率",
-        wallProbDesc: "设置生成墙壁的概率（0.1-0.7），越高关卡越复杂",
-        boxProb: "箱子生成概率",
-        boxProbDesc: "设置生成箱子和目标点的概率（0.1-0.5），影响关卡平衡性",
+        wallProb: "智能墙壁生成触发概率",
+        wallProbDesc: "触发策略性墙壁放置的概率（0.15-0.45），结合通道连通性分析，越高关卡结构越复杂",
+        boxProb: "智能箱子生成触发概率",
+        boxProbDesc: "触发箱子/目标生成的概率（0.15-0.30），结合空间分布优化，影响关卡难度和平衡性",
         resetDefault: "重置默认",
         save: "保存",
         settingsSaved: "设置已保存，生成新关卡时将应用新设置",
@@ -132,10 +132,10 @@ const languageDict = {
         maxIterationsDesc: "Set the maximum iterations for the solver (5000-200000), higher values can solve more complex levels but take longer",
         maxNodes: "Solver Maximum Memory Nodes",
         maxNodesDesc: "Set the maximum memory nodes for the solver (10000-500000), higher values allow deeper search but use more memory",
-        wallProb: "Wall Generation Probability",
-        wallProbDesc: "Set the probability of generating walls (0.1-0.7), higher values create more complex levels",
-        boxProb: "Box Generation Probability",
-        boxProbDesc: "Set the probability of generating boxes and targets (0.1-0.5), affects level balance",
+        wallProb: "Smart Wall Generation Trigger Probability",
+        wallProbDesc: "Trigger probability for strategic wall placement (0.15-0.45), combined with connectivity analysis, higher values create more complex structures",
+        boxProb: "Smart Box Generation Trigger Probability",
+        boxProbDesc: "Trigger probability for box/target generation (0.15-0.30), combined with spatial distribution optimization, affects level difficulty and balance",
         resetDefault: "Reset Defaults",
         save: "Save",
         settingsSaved: "Settings saved, they will be applied when generating new levels",
@@ -658,8 +658,8 @@ let defaultSettings = {
     maxSolverIterations: 15000,  // 1.5万次迭代 (AI生成验证用)
     maxNodesInMemory: 30000,     // 3万内存节点 (AI生成验证用)
     aiTimeout: 12000,            // AI生成超时时间
-    wallProbability: 0.4,
-    boxProbability: 0.2
+    wallProbability: 0.32,  // v3.0: 智能墙壁生成触发概率
+    boxProbability: 0.22    // v3.0: 智能箱子生成触发概率
 };
 
 // 配置文件数据

@@ -1,20 +1,20 @@
 {
-  "description": "HTML Sokoban游戏的默认参数配置文件 - 优化版本",
-  "version": "2.0",
+  "description": "HTML Sokoban游戏的默认参数配置文件 - 全面优化版本",
+  "version": "3.0",
   "lastUpdated": "2024-12-19",
-  "algorithmVersion": "动态参数计算v2.0 - 修复边界墙计算和硬编码参数",
+  "algorithmVersion": "智能生成算法v3.0 - 多维度质量评估+智能分布+渐进式回退",
   "sizeBasedSettings": {
     "6x6": {
       "boardSize": {
         "width": 6,
         "height": 6
       },
-      "aiGenerationMaxTries": 100,
-      "maxSolverIterations": 12000,
-      "maxNodesInMemory": 25000,
+      "aiGenerationMaxTries": 400,
+      "maxSolverIterations": 150000,
+      "maxNodesInMemory": 250000,
       "aiTimeout": 9000,
-      "wallProbability": 0.28,
-      "boxProbability": 0.20,
+      "wallProbability": 0.15,
+      "boxProbability": 0.30,
       "dynamicParameters": {
         "minWallRatio": 0.15,
         "maxWallRatio": 1.2,
@@ -23,19 +23,19 @@
         "fallbackMaxWallRatio": 0.40,
         "maxGenerationAttempts": 1000
       },
-      "description": "小尺寸地图，快速游戏，保证基础难度"
+      "description": "小尺寸地图，快速游戏，智能分布确保基础难度"
     },
     "7x7": {
       "boardSize": {
         "width": 7,
         "height": 7
       },
-      "aiGenerationMaxTries": 120,
-      "maxSolverIterations": 15000,
-      "maxNodesInMemory": 30000,
+      "aiGenerationMaxTries": 400,
+      "maxSolverIterations": 150000,
+      "maxNodesInMemory": 300000,
       "aiTimeout": 10000,
-      "wallProbability": 0.30,
-      "boxProbability": 0.21,
+      "wallProbability": 0.15,
+      "boxProbability": 0.30,
       "dynamicParameters": {
         "minWallRatio": 0.20,
         "maxWallRatio": 1.4,
@@ -44,19 +44,19 @@
         "fallbackMaxWallRatio": 0.45,
         "maxGenerationAttempts": 1200
       },
-      "description": "小中尺寸地图，适度难度，良好平衡"
+      "description": "小中尺寸地图，智能评估确保适度难度和良好平衡"
     },
     "8x8": {
       "boardSize": {
         "width": 8,
         "height": 8
       },
-      "aiGenerationMaxTries": 150,
-      "maxSolverIterations": 18000,
-      "maxNodesInMemory": 35000,
+      "aiGenerationMaxTries": 400,
+      "maxSolverIterations": 150000,
+      "maxNodesInMemory": 350000,
       "aiTimeout": 12000,
-      "wallProbability": 0.32,
-      "boxProbability": 0.22,
+      "wallProbability": 0.15,
+      "boxProbability": 0.30,
       "dynamicParameters": {
         "minWallRatio": 0.25,
         "maxWallRatio": 1.6,
@@ -65,19 +65,19 @@
         "fallbackMaxWallRatio": 0.50,
         "maxGenerationAttempts": 1400
       },
-      "description": "推荐尺寸，最佳游戏体验，适中难度"
+      "description": "推荐尺寸，多维度质量评估确保最佳游戏体验"
     },
     "9x9": {
       "boardSize": {
         "width": 9,
         "height": 9
       },
-      "aiGenerationMaxTries": 180,
-      "maxSolverIterations": 22000,
-      "maxNodesInMemory": 40000,
+      "aiGenerationMaxTries": 400,
+      "maxSolverIterations": 200000,
+      "maxNodesInMemory": 400000,
       "aiTimeout": 14000,
-      "wallProbability": 0.34,
-      "boxProbability": 0.23,
+      "wallProbability": 0.15,
+      "boxProbability": 0.30,
       "dynamicParameters": {
         "minWallRatio": 0.30,
         "maxWallRatio": 1.8,
@@ -86,19 +86,19 @@
         "fallbackMaxWallRatio": 0.55,
         "maxGenerationAttempts": 1600
       },
-      "description": "中等尺寸地图，挑战性增强"
+      "description": "中等尺寸地图，智能分布算法增强挑战性"
     },
     "10x10": {
       "boardSize": {
         "width": 10,
         "height": 10
       },
-      "aiGenerationMaxTries": 200,
-      "maxSolverIterations": 25000,
-      "maxNodesInMemory": 50000,
+      "aiGenerationMaxTries": 400,
+      "maxSolverIterations": 200000,
+      "maxNodesInMemory": 400000,
       "aiTimeout": 16000,
-      "wallProbability": 0.36,
-      "boxProbability": 0.24,
+      "wallProbability": 0.15,
+      "boxProbability": 0.32,
       "dynamicParameters": {
         "minWallRatio": 0.35,
         "maxWallRatio": 2.0,
@@ -107,19 +107,19 @@
         "fallbackMaxWallRatio": 0.60,
         "maxGenerationAttempts": 1800
       },
-      "description": "标准尺寸地图，高难度挑战"
+      "description": "标准尺寸地图，渐进式回退确保高质量挑战"
     },
     "11x11": {
       "boardSize": {
         "width": 11,
         "height": 11
       },
-      "aiGenerationMaxTries": 250,
-      "maxSolverIterations": 30000,
-      "maxNodesInMemory": 60000,
+      "aiGenerationMaxTries": 400,
+      "maxSolverIterations": 200000,
+      "maxNodesInMemory": 500000,
       "aiTimeout": 20000,
-      "wallProbability": 0.38,
-      "boxProbability": 0.25,
+      "wallProbability": 0.15,
+      "boxProbability": 0.35,
       "dynamicParameters": {
         "minWallRatio": 0.40,
         "maxWallRatio": 2.2,
@@ -128,7 +128,7 @@
         "fallbackMaxWallRatio": 0.65,
         "maxGenerationAttempts": 2000
       },
-      "description": "大尺寸地图，极高难度挑战"
+      "description": "大尺寸地图，全套优化算法确保极高质量挑战"
     }
   },
   "globalDefaults": {
@@ -136,12 +136,12 @@
       "width": 8,
       "height": 8
     },
-    "aiGenerationMaxTries": 150,
-    "maxSolverIterations": 18000,
-    "maxNodesInMemory": 35000,
+    "aiGenerationMaxTries": 400,
+    "maxSolverIterations": 150000,
+    "maxNodesInMemory": 350000,
     "aiTimeout": 12000,
-    "wallProbability": 0.32,
-    "boxProbability": 0.22,
+    "wallProbability": 0.15,
+    "boxProbability": 0.30,
     "dynamicParameters": {
       "minWallRatio": 0.25,
       "maxWallRatio": 1.6,
