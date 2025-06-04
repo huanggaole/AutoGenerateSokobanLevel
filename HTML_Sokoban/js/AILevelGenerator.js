@@ -31,8 +31,42 @@ class AILevelGenerator {
         this.wallProbability = options.wallProbability || 0.4; // 生成墙壁的概率
         this.boxProbability = options.boxProbability || 0.2; // 生成箱子/目标的概率
 
+        // 动态参数配置（从配置文件传入或使用默认值）
+        this.dynamicConfig = options.dynamicParameters || {
+            minWallRatio: 0.15,
+            maxWallRatio: 0.65,
+            wallPriorityRatio: 0.8,
+            fallbackMinWallRatio: 0.20,
+            fallbackMaxWallRatio: 0.40
+        };
+
+        // 动态计算参数（基于地图尺寸和配置）
+        this.calculateDynamicParameters();
+
         // 记录一下初始化参数，方便调试
         console.log(`AI关卡生成器初始化: 尺寸=${width}x${height}, 最大求解迭代=${this.maxSolverIterations}, 最大节点数=${this.maxNodesInMemory}`);
+    }
+
+    /**
+     * 根据地图尺寸和配置动态计算参数
+     */
+    calculateDynamicParameters() {
+        const totalTiles = this.width * this.height;
+        const innerTiles = (this.width - 2) * (this.height - 2); // 去除边界墙的内部区域
+        const borderWalls = 2 * this.width + 2 * (this.height - 2); // 边界墙数量
+
+        // 使用配置文件中的比例动态计算墙壁数量阈值（基于总墙壁数，包括边界墙）
+        this.minWallThreshold = Math.floor(innerTiles * this.dynamicConfig.minWallRatio) + borderWalls;
+        this.maxWallThreshold = Math.floor(innerTiles * this.dynamicConfig.maxWallRatio) + borderWalls;
+
+        // 使用配置文件中的比例动态计算优先生成墙壁的迭代次数
+        this.wallPriorityIterations = Math.floor(totalTiles * this.dynamicConfig.wallPriorityRatio);
+
+        // 使用配置文件中的比例动态计算备用关卡的墙壁数量范围（基于总墙壁数）
+        this.fallbackMinWalls = Math.floor(innerTiles * this.dynamicConfig.fallbackMinWallRatio) + borderWalls;
+        this.fallbackMaxWalls = Math.floor(innerTiles * this.dynamicConfig.fallbackMaxWallRatio) + borderWalls;
+
+        console.log(`动态参数计算: 内部区域=${innerTiles}, 边界墙=${borderWalls}, 墙壁阈值=${this.minWallThreshold}-${this.maxWallThreshold}, 优先迭代=${this.wallPriorityIterations}, 备用墙壁=${this.fallbackMinWalls}-${this.fallbackMaxWalls}`);
     }
 
     /**
@@ -107,7 +141,9 @@ class AILevelGenerator {
 
                     // 创建初始关卡
                     if (!this.generatedLevel) {
-                        this.generatedLevel = new GenerateLevel(this.width, this.height);
+                        this.generatedLevel = new GenerateLevel(this.width, this.height, {
+                            maxGenerationAttempts: this.dynamicConfig.maxGenerationAttempts
+                        });
                         this.iterationCount = 0;
                         // 计算初始墙壁数量（默认边界墙）
                         this.calculateWallCount();
@@ -124,11 +160,12 @@ class AILevelGenerator {
                     }
 
                     // 随机修改地图策略
-                    // 根据墙壁数量调整生成策略
-                    if (this.wallCount < 20) {
+                    // 根据墙壁数量调整生成策略（使用动态计算的阈值）
+                    if (this.wallCount < this.minWallThreshold) {
                         // 墙壁太少，强制生成墙壁，但数量减少
                         let wallsAdded = 0;
-                        for (let i = 0; i < 2; i++) { // 原来是3，降低为2
+                        const wallsToAdd = Math.max(1, Math.floor(this.minWallThreshold / 20)); // 动态计算要添加的墙壁数
+                        for (let i = 0; i < wallsToAdd; i++) {
                             if (this.generatedLevel.generateWall()) {
                                 wallsAdded++;
                             }
@@ -143,15 +180,15 @@ class AILevelGenerator {
                         if (wallsAdded > 0) {
                             this.calculateWallCount();
                         }
-                    } else if (this.wallCount >= 65) {
+                    } else if (this.wallCount >= this.maxWallThreshold) {
                         // 墙壁太多，只生成箱子和目标点
                         this.generatedLevel.generateBox();
                         this.generatedLevel.generateAid();
                         console.log('[AI调优] 墙壁过多，优先生成箱子和目标点');
                     } else {
                         // 墙壁数量在合理范围内，按新策略生成
-                        // 前40次迭代优先生成墙壁，增加地图复杂性
-                        if (this.iterationCount < 40 || Math.random() < this.wallProbability) { // 使用设置的概率
+                        // 使用动态计算的迭代次数优先生成墙壁，增加地图复杂性
+                        if (this.iterationCount < this.wallPriorityIterations || Math.random() < this.wallProbability) { // 使用设置的概率
                             // 每次只生成1个墙壁，降低密度
                             let wallsAdded = 0;
                             for (let i = 0; i < 1; i++) {
@@ -228,10 +265,10 @@ class AILevelGenerator {
                         // 只有在以下条件全部满足时才考虑提前结束：
                         // 1. 步骤数足够多（>=15）
                         // 2. 已经迭代足够多次（>=30）
-                        // 3. 墙壁数量在合理范围（20-65）
+                        // 3. 墙壁数量在合理范围（使用动态阈值）
                         // 4. 不再强制继续迭代
                         if (this.minSteps >= 20 && this.iterationCount >= 30 &&
-                            this.wallCount >= 20 && this.wallCount <= 65 &&
+                            this.wallCount >= this.minWallThreshold && this.wallCount <= this.maxWallThreshold &&
                             !forceMoreIterations) {
                             const finalLevel = this.convertToGameFormat();
                             console.log(`提前退出 - 步数: ${this.minSteps}, 墙壁: ${finalLevel.wallCount}`);
@@ -316,8 +353,10 @@ class AILevelGenerator {
      * 生成一个简单的备选关卡，确保始终有一个有效的解决方案
      */
     generateSimpleFallbackLevel() {
-        // 创建一个新的空关卡
-        this.generatedLevel = new GenerateLevel(this.width, this.height);
+        // 创建一个新的空关卡，传递生成尝试次数配置
+        this.generatedLevel = new GenerateLevel(this.width, this.height, {
+            maxGenerationAttempts: this.dynamicConfig.maxGenerationAttempts
+        });
 
         // 在中间偏左放置角色
         const centerY = Math.floor(this.height / 2);
@@ -335,8 +374,8 @@ class AILevelGenerator {
         // 计算当前墙壁数量（主要是边界墙）
         this.calculateWallCount();
 
-        // 添加随机墙壁，确保总数在20-30之间（保守点，避免过于复杂）
-        const targetWallCount = Math.max(20, Math.min(30, this.wallCount + 10));
+        // 添加随机墙壁，使用动态计算的范围（保守点，避免过于复杂）
+        const targetWallCount = Math.max(this.fallbackMinWalls, Math.min(this.fallbackMaxWalls, this.wallCount + Math.floor(this.fallbackMinWalls / 2)));
         while (this.wallCount < targetWallCount) {
             if (this.generatedLevel.generateWall()) {
                 this.calculateWallCount();
@@ -345,6 +384,9 @@ class AILevelGenerator {
 
         // 确保至少有解决方案
         this.minSteps = 5;
+
+        // 返回转换后的游戏格式关卡
+        return this.convertToGameFormat();
     }
 
     /**

@@ -356,7 +356,9 @@ function createCustomDialog(options) {
         button.addEventListener('click', () => {
             if (buttonConfig.action) {
                 // 先关闭对话框，再执行action
-                closeDialog(index);
+                if (modal.parentNode) {
+                    document.body.removeChild(modal);
+                }
                 buttonConfig.action();
             } else {
                 closeDialog(index);
@@ -649,8 +651,8 @@ const config = {
     aiTimeout: 8000 // AI生成超时时间（毫秒）
 };
 
-// 默认设置，用于重置
-const defaultSettings = {
+// 默认设置，用于重置 - 将从配置文件加载
+let defaultSettings = {
     boardSize: { width: 10, height: 10 },
     aiGenerationMaxTries: 100,
     maxSolverIterations: 15000,  // 1.5万次迭代 (AI生成验证用)
@@ -659,6 +661,42 @@ const defaultSettings = {
     wallProbability: 0.4,
     boxProbability: 0.2
 };
+
+// 配置文件数据
+let configData = null;
+
+// 加载配置文件
+async function loadConfigFile() {
+    try {
+        const response = await fetch('./config/default-settings.json');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        configData = await response.json();
+        console.log('配置文件加载成功');
+        return true;
+    } catch (error) {
+        console.warn('无法加载配置文件，使用内置默认设置:', error);
+        return false;
+    }
+}
+
+// 根据地图尺寸获取默认设置
+function getDefaultSettingsForSize(width, height) {
+    if (!configData) {
+        return defaultSettings;
+    }
+
+    const sizeKey = `${width}x${height}`;
+    const sizeBasedSettings = configData.sizeBasedSettings[sizeKey];
+
+    if (sizeBasedSettings) {
+        return sizeBasedSettings;
+    } else {
+        // 如果没有找到对应尺寸的设置，使用全局默认设置
+        return configData.globalDefaults || defaultSettings;
+    }
+}
 
 // 游戏状态
 let gameState = {
@@ -795,13 +833,17 @@ async function generateNewLevel() {
     gameState.moveHistory = []; // 清空移动历史
     gameState.generatingLevel = true; // 标记正在生成关卡
 
+    // 获取超时设置：优先使用用户设置，否则使用配置文件默认值
+    const fileSettings = getDefaultSettingsForSize(config.boardSize.width, config.boardSize.height);
+    const timeoutSetting = defaultSettings.aiTimeout || fileSettings.aiTimeout || config.aiTimeout;
+
     // 设置生成超时
     let generationTimeout = null;
     const timeoutPromise = new Promise((resolve) => {
         generationTimeout = setTimeout(() => {
             console.warn("关卡生成超时！使用备用方法");
             resolve({ timedOut: true });
-        }, config.aiTimeout);
+        }, timeoutSetting);
     });
 
     initializeBoard();
@@ -809,24 +851,38 @@ async function generateNewLevel() {
     // 使用AI生成关卡
     if (config.useAIGeneration && AILevelGenerator) {
         try {
-            updateGenerationProgress({ iteration: 0, maxTries: config.aiGenerationMaxTries, progress: 0 });
+            // 获取配置参数：优先使用用户保存的设置，否则使用配置文件默认值（fileSettings已在上面获取）
+            const currentSettings = {
+                aiGenerationMaxTries: defaultSettings.aiGenerationMaxTries || fileSettings.aiGenerationMaxTries,
+                maxSolverIterations: defaultSettings.maxSolverIterations || fileSettings.maxSolverIterations,
+                maxNodesInMemory: defaultSettings.maxNodesInMemory || fileSettings.maxNodesInMemory,
+                aiTimeout: defaultSettings.aiTimeout || fileSettings.aiTimeout,
+                wallProbability: defaultSettings.wallProbability || fileSettings.wallProbability,
+                boxProbability: defaultSettings.boxProbability || fileSettings.boxProbability,
+                dynamicParameters: fileSettings.dynamicParameters // 动态参数仍使用配置文件中的值
+            };
+
+            console.log(`使用设置: 生成迭代次数=${currentSettings.aiGenerationMaxTries}, 最大求解迭代=${currentSettings.maxSolverIterations}, 最大节点数=${currentSettings.maxNodesInMemory}, 墙壁概率=${currentSettings.wallProbability}, 箱子概率=${currentSettings.boxProbability}`);
+
+            updateGenerationProgress({ iteration: 0, maxTries: currentSettings.aiGenerationMaxTries, progress: 0 });
 
             // 创建生成器实例时传递所有参数
             const generator = new AILevelGenerator(
                 config.boardSize.width,
                 config.boardSize.height,
                 {
-                    maxSolverIterations: defaultSettings.maxSolverIterations,
-                    maxNodesInMemory: defaultSettings.maxNodesInMemory,
-                    maxGenerationTime: config.aiTimeout - 1000, // 给主流程留出1秒钟冗余
-                    wallProbability: defaultSettings.wallProbability, // 使用默认设置中的概率值
-                    boxProbability: defaultSettings.boxProbability  // 使用默认设置中的概率值
+                    maxSolverIterations: currentSettings.maxSolverIterations,
+                    maxNodesInMemory: currentSettings.maxNodesInMemory,
+                    maxGenerationTime: currentSettings.aiTimeout - 1000, // 给主流程留出1秒钟冗余
+                    wallProbability: currentSettings.wallProbability, // 使用用户设置的概率值
+                    boxProbability: currentSettings.boxProbability,   // 使用用户设置的概率值
+                    dynamicParameters: currentSettings.dynamicParameters // 传递动态参数配置
                 }
             );
 
             // 竞争超时和正常结果
             const result = await Promise.race([
-                generator.generateLevel(config.aiGenerationMaxTries, updateGenerationProgress),
+                generator.generateLevel(currentSettings.aiGenerationMaxTries, updateGenerationProgress),
                 timeoutPromise
             ]);
 
@@ -840,7 +896,7 @@ async function generateNewLevel() {
                 // 处理超时情况
                 console.warn("AI生成关卡超时，使用随机生成方法");
                 generateRandomLevel();
-            } else if (result.success) {
+            } else if (result.success && result.level && result.level.board) {
                 // 使用AI生成的关卡
                 gameState.board = deepCopy(result.level.board);
                 gameState.playerPos = deepCopy(result.level.playerPos);
@@ -1557,6 +1613,12 @@ function openSettings() {
 
 // 设置范围滑块的监听器
 function setupRangeListeners() {
+    // 检查是否已经设置过监听器，避免重复添加
+    if (setupRangeListeners.initialized) {
+        return;
+    }
+    setupRangeListeners.initialized = true;
+
     // 为每个滑块添加增强的事件监听器
     const rangeInputs = [
         {
@@ -1599,11 +1661,21 @@ function setupRangeListeners() {
             // 添加input事件监听器（实时更新）
             rangeElement.addEventListener('input', function () {
                 valueElement.textContent = formatter(this.value);
+
+                // 如果是地图尺寸滑块，自动更新其他参数的推荐值
+                if (id === 'board-size-range') {
+                    updateParametersForSize(parseInt(this.value));
+                }
             });
 
             // 添加change事件监听器（最终值确认）
             rangeElement.addEventListener('change', function () {
                 valueElement.textContent = formatter(this.value);
+
+                // 如果是地图尺寸滑块，自动更新其他参数的推荐值
+                if (id === 'board-size-range') {
+                    updateParametersForSize(parseInt(this.value));
+                }
             });
 
             // 移动端优化：添加触摸事件支持
@@ -1624,11 +1696,29 @@ function setupRangeListeners() {
                     // 延迟更新以确保值已改变
                     setTimeout(() => {
                         valueElement.textContent = formatter(this.value);
+
+                        // 如果是地图尺寸滑块，自动更新其他参数的推荐值
+                        if (id === 'board-size-range') {
+                            updateParametersForSize(parseInt(this.value));
+                        }
                     }, 10);
                 }
             });
         }
     });
+
+    // 添加地图尺寸变化时自动更新参数的功能
+    function updateParametersForSize(size) {
+        if (!configData) return;
+
+        const sizeBasedSettings = getDefaultSettingsForSize(size, size);
+
+        // 更新其他参数的推荐值（但不强制覆盖用户当前设置）
+        // 这里可以选择性地更新某些参数，或者提供一个按钮让用户选择是否应用推荐值
+
+        // 可以在这里添加一个小提示，告诉用户有推荐的参数可用
+        console.log(`地图尺寸 ${size}x${size} 的推荐参数:`, sizeBasedSettings);
+    }
 }
 
 // 保存设置
@@ -1649,6 +1739,7 @@ function saveSettings() {
     config.aiGenerationMaxTries = maxTries;
 
     // 更新默认设置
+    defaultSettings.aiGenerationMaxTries = maxTries;
     defaultSettings.wallProbability = wallProb;
     defaultSettings.boxProbability = boxProb;
     defaultSettings.maxSolverIterations = maxIterations;
@@ -1713,23 +1804,35 @@ function saveSettings() {
 // 重置设置为默认值
 function resetSettings() {
     showCustomConfirm(getText('confirmReset'), () => {
-        // 检查尺寸是否发生变化
-        const sizeChanged = config.boardSize.width !== defaultSettings.boardSize.width ||
-            config.boardSize.height !== defaultSettings.boardSize.height;
+        // 获取当前地图尺寸
+        const currentBoardSize = parseInt(document.getElementById('board-size-range').value);
 
-        // 重置配置
-        config.boardSize = deepCopy(defaultSettings.boardSize);
-        config.aiGenerationMaxTries = defaultSettings.aiGenerationMaxTries;
-        config.aiTimeout = defaultSettings.aiTimeout;
+        // 根据当前地图尺寸获取对应的默认设置
+        const sizeBasedDefaults = getDefaultSettingsForSize(currentBoardSize, currentBoardSize);
+
+        // 检查尺寸是否发生变化
+        const sizeChanged = config.boardSize.width !== sizeBasedDefaults.boardSize.width ||
+            config.boardSize.height !== sizeBasedDefaults.boardSize.height;
+
+        // 更新默认设置对象
+        defaultSettings.maxSolverIterations = sizeBasedDefaults.maxSolverIterations;
+        defaultSettings.maxNodesInMemory = sizeBasedDefaults.maxNodesInMemory;
+        defaultSettings.wallProbability = sizeBasedDefaults.wallProbability;
+        defaultSettings.boxProbability = sizeBasedDefaults.boxProbability;
 
         // 重置求解器设置
         if (AILevelGenerator) {
-            AILevelGenerator.prototype.maxSolverIterations = defaultSettings.maxSolverIterations;
+            AILevelGenerator.prototype.maxSolverIterations = sizeBasedDefaults.maxSolverIterations;
+            AILevelGenerator.prototype.wallProbability = sizeBasedDefaults.wallProbability;
+            AILevelGenerator.prototype.boxProbability = sizeBasedDefaults.boxProbability;
         }
 
         if (window.Solver) {
-            window.Solver.prototype.maxNodesInMemory = defaultSettings.maxNodesInMemory;
+            window.Solver.prototype.maxNodesInMemory = sizeBasedDefaults.maxNodesInMemory;
         }
+
+        // 更新UI控件的值
+        updateSettingsUI(sizeBasedDefaults);
 
         // 删除本地存储中的设置
         try {
@@ -1738,13 +1841,12 @@ function resetSettings() {
             console.warn("无法删除本地存储中的设置:", e);
         }
 
-        // 重新打开设置面板以显示默认值
-        openSettings();
-
-        // 如果尺寸发生变化，重新初始化画布并生成新关卡
+        // 如果尺寸发生变化，需要应用新尺寸
         if (sizeChanged) {
-            // 关闭设置模态框
-            closeSettings();
+            // 更新配置
+            config.boardSize = deepCopy(sizeBasedDefaults.boardSize);
+            config.aiGenerationMaxTries = sizeBasedDefaults.aiGenerationMaxTries;
+            config.aiTimeout = sizeBasedDefaults.aiTimeout;
 
             // 重新初始化画布大小
             initCanvas();
@@ -1756,9 +1858,43 @@ function resetSettings() {
             });
 
             // 提示用户设置已重置并应用
-            showCustomAlert(getText('settingsReset'));
+            showCustomAlert('设置已重置为当前地图尺寸的推荐默认值，并已应用新尺寸');
+        } else {
+            // 没有尺寸变化，只更新其他配置
+            config.aiGenerationMaxTries = sizeBasedDefaults.aiGenerationMaxTries;
+            config.aiTimeout = sizeBasedDefaults.aiTimeout;
+
+            // 提示用户设置已重置
+            showCustomAlert('设置已重置为当前地图尺寸的推荐默认值');
         }
     });
+}
+
+// 更新设置UI控件的值
+function updateSettingsUI(settings) {
+    // 更新地图尺寸
+    document.getElementById('board-size-range').value = settings.boardSize.width;
+    document.getElementById('board-size-value').textContent = `${settings.boardSize.width}×${settings.boardSize.height}`;
+
+    // 更新AI生成尝试次数
+    document.getElementById('max-tries-range').value = settings.aiGenerationMaxTries;
+    document.getElementById('max-tries-value').textContent = settings.aiGenerationMaxTries;
+
+    // 更新求解器最大迭代次数
+    document.getElementById('max-iterations-range').value = settings.maxSolverIterations;
+    document.getElementById('max-iterations-value').textContent = settings.maxSolverIterations;
+
+    // 更新求解器最大内存节点数
+    document.getElementById('max-nodes-range').value = settings.maxNodesInMemory;
+    document.getElementById('max-nodes-value').textContent = settings.maxNodesInMemory;
+
+    // 更新墙壁生成概率
+    document.getElementById('wall-prob-range').value = settings.wallProbability;
+    document.getElementById('wall-prob-value').textContent = settings.wallProbability.toFixed(2);
+
+    // 更新箱子生成概率
+    document.getElementById('box-prob-range').value = settings.boxProbability;
+    document.getElementById('box-prob-value').textContent = settings.boxProbability.toFixed(2);
 }
 
 // 应用推荐设置
@@ -1813,6 +1949,7 @@ function loadSettings() {
             if (settings.aiTimeout) config.aiTimeout = settings.aiTimeout;
 
             // 保存求解器设置以便在加载时应用
+            if (settings.aiGenerationMaxTries) defaultSettings.aiGenerationMaxTries = settings.aiGenerationMaxTries;
             if (settings.maxSolverIterations) defaultSettings.maxSolverIterations = settings.maxSolverIterations;
             if (settings.maxNodesInMemory) defaultSettings.maxNodesInMemory = settings.maxNodesInMemory;
             if (settings.wallProbability) defaultSettings.wallProbability = settings.wallProbability;
@@ -1848,6 +1985,9 @@ async function initGame() {
     } catch (e) {
         console.warn("无法从本地存储加载语言设置:", e);
     }
+
+    // 加载配置文件
+    await loadConfigFile();
 
     // 初始化Canvas和上下文
     const canvasInitialized = initCanvas();
@@ -2979,16 +3119,48 @@ document.addEventListener('keydown', (event) => {
 
 // 关闭设置模态框
 function closeSettings() {
-    const modal = document.getElementById('settings-modal');
-    modal.style.display = 'none';
+    // 检查地图尺寸是否发生变化
+    const currentBoardSize = parseInt(document.getElementById('board-size-range').value);
+    const sizeChanged = config.boardSize.width !== currentBoardSize || config.boardSize.height !== currentBoardSize;
 
-    // 移动端优化：恢复背景滚动
-    if (window.innerWidth <= 768) {
-        document.body.style.overflow = '';
+    if (sizeChanged) {
+        // 如果尺寸发生变化，提示用户保存设置
+        showCustomConfirm('地图尺寸已更改，是否保存设置并应用新尺寸？',
+            () => {
+                // 用户选择保存，调用saveSettings
+                saveSettings();
+            },
+            () => {
+                // 用户选择不保存，恢复原来的尺寸显示
+                document.getElementById('board-size-range').value = config.boardSize.width;
+                document.getElementById('board-size-value').textContent = `${config.boardSize.width}×${config.boardSize.height}`;
+
+                // 关闭模态框
+                const modal = document.getElementById('settings-modal');
+                modal.style.display = 'none';
+
+                // 移动端优化：恢复背景滚动
+                if (window.innerWidth <= 768) {
+                    document.body.style.overflow = '';
+                }
+
+                // 移除事件监听器
+                modal.removeEventListener('click', closeSettings);
+            }
+        );
+    } else {
+        // 没有尺寸变化，直接关闭
+        const modal = document.getElementById('settings-modal');
+        modal.style.display = 'none';
+
+        // 移动端优化：恢复背景滚动
+        if (window.innerWidth <= 768) {
+            document.body.style.overflow = '';
+        }
+
+        // 移除事件监听器
+        modal.removeEventListener('click', closeSettings);
     }
-
-    // 移除事件监听器
-    modal.removeEventListener('click', closeSettings);
 }
 
 // 存储关卡功能
@@ -3276,6 +3448,13 @@ window.buildLevel = function () {
     buildMode = true;
     console.log("进入建造模式");
 
+    // 隐藏虚拟方向键（手机端）
+    const touchControls = document.getElementById('touch-controls');
+    if (touchControls) {
+        touchControls.style.display = 'none';
+        console.log("已隐藏虚拟方向键");
+    }
+
     // 保存当前关卡状态以备取消时恢复
     const savedState = {
         board: deepCopy(gameState.board),
@@ -3341,6 +3520,13 @@ window.buildLevel = function () {
 
         buildMode = false;
 
+        // 恢复虚拟方向键显示（手机端）
+        const touchControls = document.getElementById('touch-controls');
+        if (touchControls && window.innerWidth <= 600) {
+            touchControls.style.display = 'block';
+            console.log("已恢复虚拟方向键显示");
+        }
+
         // 重新渲染游戏
         renderGame();
         console.log("已退出建造模式");
@@ -3380,6 +3566,13 @@ window.buildLevel = function () {
         console.log("已重新启用其他功能按钮");
 
         buildMode = false;
+
+        // 恢复虚拟方向键显示（手机端）
+        const touchControls = document.getElementById('touch-controls');
+        if (touchControls && window.innerWidth <= 600) {
+            touchControls.style.display = 'block';
+            console.log("已恢复虚拟方向键显示");
+        }
 
         // 计算和更新关卡基本信息
         let wallCount = countTiles('wall');

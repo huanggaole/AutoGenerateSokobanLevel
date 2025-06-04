@@ -27,12 +27,16 @@ class GenerateLevel {
      * 构造函数
      * @param {number} w - 地图宽度
      * @param {number} h - 地图高度
+     * @param {Object} options - 可选配置参数
      */
-    constructor(w, h) {
+    constructor(w, h, options = {}) {
         this.width = w;
         this.height = h;
         this.tiles = new Array(w * h);
         this.savedtiles = new Array(w * h);
+
+        // 可配置的生成尝试次数
+        this.maxGenerationAttempts = options.maxGenerationAttempts || 1000;
 
         // 初始化地图，围墙一圈
         for (let i = 0; i < this.height; i++) {
@@ -57,7 +61,7 @@ class GenerateLevel {
      * @returns {boolean} 是否成功生成
      */
     generateChar() {
-        let gtime = 1000;
+        let gtime = this.maxGenerationAttempts;
         while (gtime--) {
             const randi = Math.floor(Math.random() * this.height);
             const randj = Math.floor(Math.random() * this.width);
@@ -74,7 +78,7 @@ class GenerateLevel {
      * @returns {boolean} 是否成功生成
      */
     generateBox() {
-        let gtime = 1000;
+        let gtime = this.maxGenerationAttempts;
         while (gtime--) {
             const randi = Math.floor(Math.random() * this.height);
             const randj = Math.floor(Math.random() * this.width);
@@ -91,7 +95,7 @@ class GenerateLevel {
      * @returns {boolean} 是否成功生成
      */
     generateWall() {
-        let gtime = 1000;
+        let gtime = this.maxGenerationAttempts;
         while (gtime--) {
             const randi = Math.floor(Math.random() * this.height);
             const randj = Math.floor(Math.random() * this.width);
@@ -108,7 +112,7 @@ class GenerateLevel {
      * @returns {boolean} 是否成功生成
      */
     generateAid() {
-        let gtime = 1000;
+        let gtime = this.maxGenerationAttempts;
         while (gtime--) {
             const randi = Math.floor(Math.random() * this.height);
             const randj = Math.floor(Math.random() * this.width);

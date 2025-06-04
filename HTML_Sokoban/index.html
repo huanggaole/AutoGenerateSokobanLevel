@@ -669,7 +669,7 @@
                                 step="1" value="10">
                             <span id="board-size-value" class="range-value">10×10</span>
                         </div>
-                        <div class="setting-description">设置关卡的宽度和高度（6×6到11×11）</div>
+                        <div class="setting-description">设置关卡的宽度和高度（6×6到11×11），重置默认时会根据此尺寸加载对应的推荐参数</div>
                     </div>
                 </div>
 
@@ -705,25 +705,25 @@
                     <div class="setting-item">
                         <div class="setting-label">墙壁生成概率</div>
                         <div class="range-container">
-                            <input type="range" id="wall-prob-range" class="range-input setting-input" min="0.1"
-                                max="0.7" step="0.05" value="0.4">
-                            <span id="wall-prob-value" class="range-value">0.4</span>
+                            <input type="range" id="wall-prob-range" class="range-input setting-input" min="0.15"
+                                max="0.45" step="0.05" value="0.30">
+                            <span id="wall-prob-value" class="range-value">0.30</span>
                         </div>
-                        <div class="setting-description">设置生成墙壁的概率（0.1-0.7），越高关卡越复杂</div>
+                        <div class="setting-description">设置生成墙壁的概率（0.15-0.45），越高关卡越复杂，推荐0.25-0.35</div>
                     </div>
                     <div class="setting-item">
                         <div class="setting-label">箱子生成概率</div>
                         <div class="range-container">
-                            <input type="range" id="box-prob-range" class="range-input setting-input" min="0.1"
-                                max="0.5" step="0.05" value="0.2">
-                            <span id="box-prob-value" class="range-value">0.2</span>
+                            <input type="range" id="box-prob-range" class="range-input setting-input" min="0.15"
+                                max="0.30" step="0.05" value="0.20">
+                            <span id="box-prob-value" class="range-value">0.20</span>
                         </div>
-                        <div class="setting-description">设置生成箱子和目标点的概率（0.1-0.5），影响关卡平衡性</div>
+                        <div class="setting-description">设置生成箱子和目标点的概率（0.15-0.30），影响关卡难度和可解性，推荐0.18-0.25</div>
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn-reset" onclick="resetSettings()">重置默认</button>
+                <button class="btn-reset" onclick="resetSettings()" title="根据当前地图尺寸重置为推荐的默认参数">重置默认</button>
                 <button class="btn-save" onclick="saveSettings()">保存</button>
             </div>
         </div>
