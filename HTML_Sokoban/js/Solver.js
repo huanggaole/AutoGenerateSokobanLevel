@@ -15,15 +15,16 @@ class Solver {
     constructor(state) {
         this.width = state.width;
         this.height = state.height;
-        this.maxIterations = 7000; // 默认最大迭代次数
-        this.maxNodesInMemory = 15000; // 最大内存中节点数，超过时会优先考虑简单方案或返回无解
-        this.batchSize = 100; // 每批处理状态数
+        this.maxIterations = 10000; // 提高默认最大迭代次数
+        this.maxNodesInMemory = 25000; // 提高最大内存中节点数
+        this.batchSize = 50; // 减少批处理大小，提高搜索质量
 
-        // 初始化状态节点哈希表
-        this.statenodes = new Array(this.height * this.width);
-        this.statenodesamount = new Array(this.height * this.width).fill(0);
+        // 使用更大的哈希表以减少冲突
+        this.hashTableSize = Math.max(1009, this.height * this.width * 7); // 使用质数作为哈希表大小
+        this.statenodes = new Array(this.hashTableSize);
+        this.statenodesamount = new Array(this.hashTableSize).fill(0);
 
-        for (let i = 0; i < this.height * this.width; i++) {
+        for (let i = 0; i < this.hashTableSize; i++) {
             this.statenodes[i] = new StateNode();
         }
 
@@ -42,22 +43,48 @@ class Solver {
     }
 
     /**
+     * 计算状态的改进哈希码
+     * @param {State} state - 要计算哈希的状态
+     * @returns {number} 哈希码
+     */
+    calculateHash(state) {
+        let hash = 0;
+        const prime1 = 31;
+        const prime2 = 37;
+
+        // 考虑箱子位置，使用更好的哈希函数
+        for (let i = 0; i < this.height; i++) {
+            for (let j = 0; j < this.width; j++) {
+                if (state.tiles[i * this.width + j] === TileType.Box ||
+                    state.tiles[i * this.width + j] === TileType.BoxinAid) {
+                    // 使用位置的多项式哈希
+                    hash = (hash * prime1 + (i * this.width + j) * prime2) % this.hashTableSize;
+                }
+            }
+        }
+
+        // 考虑玩家可达区域的特征，增加状态区分度
+        let reachableCount = 0;
+        for (let i = 0; i < this.height; i++) {
+            for (let j = 0; j < this.width; j++) {
+                if (state.tiles[i * this.width + j] === TileType.Character ||
+                    state.tiles[i * this.width + j] === TileType.CharacterinAid) {
+                    reachableCount++;
+                    hash = (hash * prime1 + (i * this.width + j)) % this.hashTableSize;
+                }
+            }
+        }
+
+        return Math.abs(hash) % this.hashTableSize;
+    }
+
+    /**
      * 添加状态到哈希表
      * @param {State} state - 要添加的状态
      * @returns {StateNode} 状态对应的节点
      */
     addState(state) {
-        let code = 0;
-        // 将箱子视为1，非箱子视为0，计算哈希码
-        for (let i = 0; i < this.height; i++) {
-            for (let j = 0; j < this.width; j++) {
-                if (state.tiles[i * this.width + j] === TileType.Box ||
-                    state.tiles[i * this.width + j] === TileType.BoxinAid) {
-                    code += i * this.width + j;
-                }
-            }
-        }
-        code = code % (this.height * this.width);
+        const code = this.calculateHash(state);
         this.statenodesamount[code]++;
         this.totalNodes++;
 
@@ -70,23 +97,45 @@ class Solver {
      * @returns {boolean} 是否存在
      */
     ifContain(state) {
-        let code = 0;
-        // 将箱子视为1，非箱子视为0，计算哈希码
+        const code = this.calculateHash(state);
+        return this.statenodes[code].ifContain(state);
+    }
+
+    /**
+     * 计算启发式函数值（曼哈顿距离）
+     * @param {State} state - 要计算的状态
+     * @returns {number} 启发式值
+     */
+    calculateHeuristic(state) {
+        let totalDistance = 0;
+        const boxes = [];
+        const targets = [];
+
+        // 收集箱子和目标点位置
         for (let i = 0; i < this.height; i++) {
             for (let j = 0; j < this.width; j++) {
-                if (state.tiles[i * this.width + j] === TileType.Box ||
-                    state.tiles[i * this.width + j] === TileType.BoxinAid) {
-                    code += i * this.width + j;
+                if (state.tiles[i * this.width + j] === TileType.Box) {
+                    boxes.push({ x: j, y: i });
+                }
+                if (state.tiles[i * this.width + j] === TileType.Aid) {
+                    targets.push({ x: j, y: i });
                 }
             }
         }
-        code = code % (this.height * this.width);
 
-        if (this.statenodes[code].ifContain(state)) {
-            return true;
+        // 计算每个箱子到最近目标点的曼哈顿距离
+        for (const box of boxes) {
+            let minDistance = Infinity;
+            for (const target of targets) {
+                const distance = Math.abs(box.x - target.x) + Math.abs(box.y - target.y);
+                minDistance = Math.min(minDistance, distance);
+            }
+            if (minDistance !== Infinity) {
+                totalDistance += minDistance;
+            }
         }
 
-        return false;
+        return totalDistance;
     }
 
     /**
@@ -96,11 +145,20 @@ class Solver {
     run() {
         this.iterNum = 0;
 
-        // 使用简单的迭代方式，每次处理一批状态
+        // 使用改进的搜索策略
         while (this.iterNum < this.maxIterations && this.totalNodes < this.maxNodesInMemory) {
             // 如果未探索列表为空，则无解
             if (this.unexploidlist.length === 0) {
                 return -1;
+            }
+
+            // 按启发式值排序，优先处理更有希望的状态
+            if (this.iterNum % 100 === 0 && this.unexploidlist.length > 1) {
+                this.unexploidlist.sort((a, b) => {
+                    const heuristicA = this.calculateHeuristic(a.currentstate) + a.depth;
+                    const heuristicB = this.calculateHeuristic(b.currentstate) + b.depth;
+                    return heuristicA - heuristicB;
+                });
             }
 
             // 批处理多个状态
@@ -109,8 +167,8 @@ class Solver {
                 this.iterNum++;
 
                 // 每隔一段时间检查一次迭代次数
-                if (this.iterNum % 500 === 0) {
-                    console.log(`Solver 已迭代 ${this.iterNum} 次`);
+                if (this.iterNum % 1000 === 0) {
+                    console.log(`Solver 已迭代 ${this.iterNum} 次，队列长度: ${this.unexploidlist.length}`);
                 }
 
                 // 取出一个状态进行探索
@@ -118,20 +176,19 @@ class Solver {
                 const depth = orisn.depth;
                 const oristate = orisn.currentstate;
 
-                // 如果深度过大，考虑跳过（另一种优化手段）
-                if (depth > 50) {
-                    // 深度过大，有50%的概率跳过这个状态
-                    if (Math.random() < 0.5) continue;
+                // 改进的深度限制策略
+                if (depth > 80) {
+                    // 深度过大，跳过这个状态
+                    continue;
                 }
 
                 const tempstate = oristate.clone();
 
                 // 遍历棋盘上的每一个Box
                 const alldirection = [Direction.D_UP, Direction.D_DOWN, Direction.D_LEFT, Direction.D_RIGHT];
+                const newStates = [];
 
-                // 随机打乱方向，以获得更多随机性和避免局部最优解
-                this.shuffleArray(alldirection);
-
+                // 生成所有可能的新状态
                 for (let i = 0; i < oristate.height; i++) {
                     for (let j = 0; j < oristate.width; j++) {
                         if (tempstate.tiles[i * oristate.width + j] === TileType.Box ||
@@ -153,14 +210,22 @@ class Solver {
                                         newstate = null; // JavaScript GC会处理
                                     }
                                     else {
-                                        // 添加新状态到搜索队列
-                                        const sn = this.addState(newstate);
-                                        sn.depth = depth + 1;
-                                        sn.parentstate = orisn;
-                                        this.unexploidlist.push(sn);
+                                        // 计算启发式值并存储
+                                        const heuristic = this.calculateHeuristic(newstate);
+                                        newStates.push({
+                                            state: newstate,
+                                            heuristic: heuristic,
+                                            boxPos: { i, j },
+                                            direction: alldirection[k]
+                                        });
 
                                         // 检查是否胜利
                                         if (newstate.ifWin()) {
+                                            // 添加胜利状态到搜索队列
+                                            const sn = this.addState(newstate);
+                                            sn.depth = depth + 1;
+                                            sn.parentstate = orisn;
+
                                             // 构建解决方案步骤
                                             let tempsn = sn;
                                             while (tempsn) {
@@ -179,6 +244,17 @@ class Solver {
                         }
                     }
                 }
+
+                // 按启发式值排序新状态，优先处理更有希望的状态
+                newStates.sort((a, b) => a.heuristic - b.heuristic);
+
+                // 添加排序后的状态到搜索队列
+                for (const stateInfo of newStates) {
+                    const sn = this.addState(stateInfo.state);
+                    sn.depth = depth + 1;
+                    sn.parentstate = orisn;
+                    this.unexploidlist.push(sn);
+                }
             }
         }
 
@@ -191,16 +267,7 @@ class Solver {
         return 0;
     }
 
-    /**
-     * 随机打乱数组顺序
-     * @param {Array} array - 要打乱的数组
-     */
-    shuffleArray(array) {
-        for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
-        }
-    }
+
 
     /**
      * 记录求解路径信息（用于调试）

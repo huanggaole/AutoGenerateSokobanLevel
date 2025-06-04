@@ -39,14 +39,14 @@ const languageDict = {
         aiError: "AI演示过程出错，请重试。",
         settingsTitle: "游戏设置",
         boardSize: "关卡尺寸",
-        boardSizeDesc: "设置关卡的宽度和高度（6×6到15×15）",
+        boardSizeDesc: "设置关卡的宽度和高度（6×6到11×11）",
         aiParams: "AI生成参数",
         maxTries: "最大生成迭代次数",
-        maxTriesDesc: "设置AI生成关卡的最大尝试次数（10-100），越大生成的关卡平均来说可能更难",
+        maxTriesDesc: "设置AI生成关卡的最大尝试次数（10-500），越大生成的关卡平均来说可能更难",
         maxIterations: "求解器最大迭代次数",
-        maxIterationsDesc: "设置求解器的最大迭代次数（1000-10000）",
+        maxIterationsDesc: "设置求解器的最大迭代次数（5000-200000），更高值可解决更复杂关卡但耗时更长",
         maxNodes: "求解器最大内存节点数",
-        maxNodesDesc: "设置求解器的最大内存节点数（5000-30000）",
+        maxNodesDesc: "设置求解器的最大内存节点数（10000-500000），更高值允许更深搜索但占用更多内存",
         wallProb: "墙壁生成概率",
         wallProbDesc: "设置生成墙壁的概率（0.1-0.7），越高关卡越复杂",
         boxProb: "箱子生成概率",
@@ -124,14 +124,14 @@ const languageDict = {
         aiError: "AI demonstration error, please try again.",
         settingsTitle: "Game Settings",
         boardSize: "Board Size",
-        boardSizeDesc: "Set the width and height of the level (6×6 to 15×15)",
+        boardSizeDesc: "Set the width and height of the level (6×6 to 11×11)",
         aiParams: "AI Generation Parameters",
         maxTries: "Maximum Generation Iterations",
-        maxTriesDesc: "Set the maximum number of AI level generation attempts (10-100), higher values may generate more difficult levels",
+        maxTriesDesc: "Set the maximum number of AI level generation attempts (10-500), higher values may generate more difficult levels",
         maxIterations: "Solver Maximum Iterations",
-        maxIterationsDesc: "Set the maximum iterations for the solver (1000-10000)",
+        maxIterationsDesc: "Set the maximum iterations for the solver (5000-200000), higher values can solve more complex levels but take longer",
         maxNodes: "Solver Maximum Memory Nodes",
-        maxNodesDesc: "Set the maximum memory nodes for the solver (5000-30000)",
+        maxNodesDesc: "Set the maximum memory nodes for the solver (10000-500000), higher values allow deeper search but use more memory",
         wallProb: "Wall Generation Probability",
         wallProbDesc: "Set the probability of generating walls (0.1-0.7), higher values create more complex levels",
         boxProb: "Box Generation Probability",
@@ -653,9 +653,9 @@ const config = {
 const defaultSettings = {
     boardSize: { width: 10, height: 10 },
     aiGenerationMaxTries: 100,
-    maxSolverIterations: 5000,
-    maxNodesInMemory: 15000,
-    aiTimeout: 8000,
+    maxSolverIterations: 15000,  // 1.5万次迭代 (AI生成验证用)
+    maxNodesInMemory: 30000,     // 3万内存节点 (AI生成验证用)
+    aiTimeout: 12000,            // AI生成超时时间
     wallProbability: 0.4,
     boxProbability: 0.2
 };
@@ -1488,8 +1488,10 @@ window.addEventListener('resize', function () {
 // 设置模态框函数
 function openSettings() {
     // 填充当前设置值
+    document.getElementById('board-size-range').min = 6;
+    document.getElementById('board-size-range').max = 11;
     document.getElementById('board-size-range').value = config.boardSize.width;
-    document.getElementById('board-size-value').textContent = `${config.boardSize.width}×${config.boardSize.height}`;
+    document.getElementById('board-size-value').textContent = `${config.boardSize.width}×${config.boardSize.width}`;
 
     document.getElementById('max-tries-range').value = config.aiGenerationMaxTries;
     document.getElementById('max-tries-value').textContent = config.aiGenerationMaxTries;
@@ -1761,30 +1763,32 @@ function resetSettings() {
 
 // 应用推荐设置
 function applyRecommendedSettings() {
-    const message = `推荐设置基于测试优化，平衡了性能和关卡质量：
+    const message = `推荐设置基于算法优化，平衡了性能和关卡质量：
 
 🎯 关卡尺寸: 8×8 (适中复杂度)
-🤖 最大尝试次数: 40 (良好质量/时间平衡)
-🧠 最大迭代次数: 8000 (高成功率)
-💾 最大内存节点数: 18000 (平衡内存和成功率)
+🤖 最大尝试次数: 150 (良好质量/时间平衡)
+🧠 最大迭代次数: 25000 (2.5万，高成功率)
+💾 最大内存节点数: 50000 (5万，充足内存)
 🧱 墙壁概率: 0.28 (适中密度)
 📦 箱子概率: 0.22 (适中难度)
+
+注：AI求解演示固定使用25万迭代+50万内存，不受此设置影响
 
 是否应用这些推荐设置？`;
 
     showCustomConfirm(message, () => {
-        // 应用推荐设置
+        // 应用推荐设置（确保尺寸在11x11范围内）
         document.getElementById('board-size-range').value = 8;
         document.getElementById('board-size-value').textContent = '8×8';
 
-        document.getElementById('max-tries-range').value = 40;
-        document.getElementById('max-tries-value').textContent = '40';
+        document.getElementById('max-tries-range').value = 150;
+        document.getElementById('max-tries-value').textContent = '150';
 
-        document.getElementById('max-iterations-range').value = 8000;
-        document.getElementById('max-iterations-value').textContent = '8000';
+        document.getElementById('max-iterations-range').value = 25000;
+        document.getElementById('max-iterations-value').textContent = '25000';
 
-        document.getElementById('max-nodes-range').value = 18000;
-        document.getElementById('max-nodes-value').textContent = '18000';
+        document.getElementById('max-nodes-range').value = 50000;
+        document.getElementById('max-nodes-value').textContent = '50000';
 
         document.getElementById('wall-prob-range').value = 0.28;
         document.getElementById('wall-prob-value').textContent = '0.28';
@@ -2005,12 +2009,12 @@ async function aiDemonstration() {
         return;
     }
 
-    // 求解当前关卡
+    // 求解当前关卡 (使用AI演示专用的高参数求解器)
     try {
-        const solution = await solvePuzzle(solverState);
+        const solution = await solvePuzzleForDemo(solverState);
         if (!solution || solution.length === 0) {
-            console.error('未找到解决方案');
-            showCustomAlert('AI无法找到解决方案，请尝试其他关卡。');
+            console.error('AI演示未找到解决方案');
+            showCustomAlert(getText('aiFailed'));
             endAiDemo();
             return;
         }
@@ -2268,7 +2272,7 @@ async function createSolverState() {
 }
 
 /**
- * 求解推箱子关卡
+ * 求解推箱子关卡 (用于AI生成关卡时的验证)
  * @param {State} state - 初始状态
  * @returns {Array} 解决步骤
  */
@@ -2280,11 +2284,11 @@ async function solvePuzzle(state) {
         // 创建求解器实例
         const solver = new Solver(state);
 
-        // 使用设置中的最大迭代次数
-        solver.maxIterations = defaultSettings.maxSolverIterations || 10000;
-        solver.maxNodesInMemory = defaultSettings.maxNodesInMemory || 15000;
+        // 使用设置中的最大迭代次数 (用于AI生成关卡验证)
+        solver.maxIterations = defaultSettings.maxSolverIterations || 15000;
+        solver.maxNodesInMemory = defaultSettings.maxNodesInMemory || 30000;
 
-        console.log(`AI求解使用参数: 最大迭代次数=${solver.maxIterations}, 最大内存节点数=${solver.maxNodesInMemory}`);
+        console.log(`AI生成关卡验证使用参数: 最大迭代次数=${solver.maxIterations}, 最大内存节点数=${solver.maxNodesInMemory}`);
 
         // 执行求解
         const result = solver.run();
@@ -2302,6 +2306,44 @@ async function solvePuzzle(state) {
         }
     } catch (error) {
         console.error('求解过程出错:', error);
+        return null;
+    }
+}
+
+/**
+ * AI求解演示专用函数 (使用最高参数)
+ * @param {State} state - 初始状态
+ * @returns {Array} 解决步骤
+ */
+async function solvePuzzleForDemo(state) {
+    try {
+        // 导入求解器
+        const { Solver } = await import('./js/Solver.js');
+
+        // 创建求解器实例
+        const solver = new Solver(state);
+
+        // 使用最高参数确保能够解决复杂关卡
+        solver.maxIterations = 250000;  // 25万次迭代
+        solver.maxNodesInMemory = 500000;  // 50万内存节点
+
+        console.log(`AI求解演示使用最高参数: 最大迭代次数=${solver.maxIterations}, 最大内存节点数=${solver.maxNodesInMemory}`);
+
+        // 执行求解
+        const result = solver.run();
+
+        if (result === 1) {
+            console.log('AI演示找到解决方案，步骤数:', solver.steplist.length - 1);
+            return solver.steplist;
+        } else if (result === -1) {
+            console.error('关卡无解');
+            return null;
+        } else {
+            console.error('AI演示求解超时');
+            return null;
+        }
+    } catch (error) {
+        console.error('AI演示求解过程出错:', error);
         return null;
     }
 }
@@ -3602,7 +3644,7 @@ function createBuildModeUI() {
     sizeSelect.style.outline = 'none';
 
     // 添加尺寸选项
-    for (let size = 6; size <= 15; size++) {
+    for (let size = 6; size <= 11; size++) {  // 修改最大值为11
         const option = document.createElement('option');
         option.value = size;
         option.textContent = `${size}×${size}`;

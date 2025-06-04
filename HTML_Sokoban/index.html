@@ -665,11 +665,11 @@
                     <div class="setting-label">关卡尺寸</div>
                     <div class="setting-item">
                         <div class="range-container">
-                            <input type="range" id="board-size-range" class="range-input setting-input" min="6" max="15"
+                            <input type="range" id="board-size-range" class="range-input setting-input" min="6" max="11"
                                 step="1" value="10">
                             <span id="board-size-value" class="range-value">10×10</span>
                         </div>
-                        <div class="setting-description">设置关卡的宽度和高度（6×6到15×15）</div>
+                        <div class="setting-description">设置关卡的宽度和高度（6×6到11×11）</div>
                     </div>
                 </div>
 
@@ -679,28 +679,28 @@
                         <div class="setting-label">最大生成迭代次数</div>
                         <div class="range-container">
                             <input type="range" id="max-tries-range" class="range-input setting-input" min="10"
-                                max="100" step="5" value="100">
+                                max="500" step="10" value="100">
                             <span id="max-tries-value" class="range-value">100</span>
                         </div>
-                        <div class="setting-description">设置AI生成关卡的最大尝试次数（10-100），越大生成的关卡平均来说可能更难</div>
+                        <div class="setting-description">设置AI生成关卡的最大尝试次数（10-500），越大生成的关卡平均来说可能更难</div>
                     </div>
                     <div class="setting-item">
                         <div class="setting-label">求解器最大迭代次数</div>
                         <div class="range-container">
-                            <input type="range" id="max-iterations-range" class="range-input setting-input" min="1000"
-                                max="10000" step="500" value="5000">
-                            <span id="max-iterations-value" class="range-value">5000</span>
+                            <input type="range" id="max-iterations-range" class="range-input setting-input" min="5000"
+                                max="200000" step="5000" value="15000">
+                            <span id="max-iterations-value" class="range-value">15000</span>
                         </div>
-                        <div class="setting-description">设置求解器的最大迭代次数（1000-10000）</div>
+                        <div class="setting-description">设置求解器的最大迭代次数（5000-200000），更高值可解决更复杂关卡但耗时更长</div>
                     </div>
                     <div class="setting-item">
                         <div class="setting-label">求解器最大内存节点数</div>
                         <div class="range-container">
-                            <input type="range" id="max-nodes-range" class="range-input setting-input" min="5000"
-                                max="30000" step="1000" value="15000">
-                            <span id="max-nodes-value" class="range-value">15000</span>
+                            <input type="range" id="max-nodes-range" class="range-input setting-input" min="10000"
+                                max="500000" step="10000" value="30000">
+                            <span id="max-nodes-value" class="range-value">30000</span>
                         </div>
-                        <div class="setting-description">设置求解器的最大内存节点数（5000-30000）</div>
+                        <div class="setting-description">设置求解器的最大内存节点数（10000-500000），更高值允许更深搜索但占用更多内存</div>
                     </div>
                     <div class="setting-item">
                         <div class="setting-label">墙壁生成概率</div>

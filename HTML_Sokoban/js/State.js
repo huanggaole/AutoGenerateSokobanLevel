@@ -416,23 +416,30 @@ class State {
                 let Boxnum = 0;
                 let Wallnum = 0;
                 let BoxinAidnum = 0;
+                let Aidnum = 0;
 
                 for (let ii = 0; ii < 2; ii++) {
                     for (let jj = 0; jj < 2; jj++) {
-                        if (this.tiles[(i + ii) * this.width + j + jj] === TileType.Box) {
+                        const tile = this.tiles[(i + ii) * this.width + j + jj];
+                        if (tile === TileType.Box) {
                             Boxnum++;
-                        }
-                        if (this.tiles[(i + ii) * this.width + j + jj] === TileType.Wall) {
+                        } else if (tile === TileType.Wall) {
                             Wallnum++;
-                        }
-                        if (this.tiles[(i + ii) * this.width + j + jj] === TileType.BoxinAid) {
+                        } else if (tile === TileType.BoxinAid) {
                             BoxinAidnum++;
+                        } else if (tile === TileType.Aid) {
+                            Aidnum++;
                         }
                     }
                 }
 
+                // 只有当存在未完成的箱子且形成完全封闭的2x2区域时才是死锁
+                // 如果所有箱子都在目标点上，则不是死锁
                 if ((Boxnum + Wallnum + BoxinAidnum === 4) && Boxnum > 0) {
-                    return true;
+                    // 进一步检查：如果这个2x2区域中有足够的目标点，可能不是死锁
+                    if (BoxinAidnum + Aidnum < Boxnum) {
+                        return true;
+                    }
                 }
             }
         }
