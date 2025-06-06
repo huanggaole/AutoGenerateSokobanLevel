@@ -55,8 +55,8 @@
       "maxSolverIterations": 150000,
       "maxNodesInMemory": 350000,
       "aiTimeout": 12000,
-      "wallProbability": 0.15,
-      "boxProbability": 0.30,
+      "wallProbability": 0.5,
+      "boxProbability": 1.0,
       "dynamicParameters": {
         "minWallRatio": 0.25,
         "maxWallRatio": 1.6,
@@ -140,8 +140,8 @@
     "maxSolverIterations": 150000,
     "maxNodesInMemory": 350000,
     "aiTimeout": 12000,
-    "wallProbability": 0.15,
-    "boxProbability": 0.30,
+    "wallProbability": 0.5,
+    "boxProbability": 1.0,
     "dynamicParameters": {
       "minWallRatio": 0.25,
       "maxWallRatio": 1.6,

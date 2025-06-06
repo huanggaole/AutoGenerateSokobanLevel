@@ -665,11 +665,11 @@
                     <div class="setting-label">关卡尺寸</div>
                     <div class="setting-item">
                         <div class="range-container">
-                            <input type="range" id="board-size-range" class="range-input setting-input" min="6" max="11"
-                                step="1" value="10">
-                            <span id="board-size-value" class="range-value">10×10</span>
+                            <input type="range" id="board-size-range" class="range-input setting-input" min="6" max="8"
+                                step="1" value="8">
+                            <span id="board-size-value" class="range-value">8×8</span>
                         </div>
-                        <div class="setting-description">设置关卡的宽度和高度（6×6到11×11），重置默认时会根据此尺寸加载对应的推荐参数</div>
+                        <div class="setting-description">设置关卡的宽度和高度（6×6到8×8），重置默认时会根据此尺寸加载对应的推荐参数</div>
                     </div>
                 </div>
 
@@ -707,19 +707,19 @@
                         <div class="setting-label">智能墙壁生成触发概率</div>
                         <div class="range-container">
                             <input type="range" id="wall-prob-range" class="range-input setting-input" min="0.15"
-                                max="0.45" step="0.01" value="0.32">
-                            <span id="wall-prob-value" class="range-value">0.32</span>
+                                max="1.0" step="0.1" value="0.5">
+                            <span id="wall-prob-value" class="range-value">0.5</span>
                         </div>
-                        <div class="setting-description">触发策略性墙壁放置的概率（0.15-0.45），结合通道连通性分析，越高关卡结构越复杂</div>
+                        <div class="setting-description">触发策略性墙壁放置的概率（0.1-1.0），结合通道连通性分析，越高关卡结构越复杂</div>
                     </div>
                     <div class="setting-item">
                         <div class="setting-label">智能箱子生成触发概率</div>
                         <div class="range-container">
                             <input type="range" id="box-prob-range" class="range-input setting-input" min="0.15"
-                                max="0.35" step="0.01" value="0.22">
-                            <span id="box-prob-value" class="range-value">0.22</span>
+                                max="1.0" step="0.1" value="0.5">
+                            <span id="box-prob-value" class="range-value">0.5</span>
                         </div>
-                        <div class="setting-description">触发箱子/目标生成的概率（0.15-0.35），结合空间分布优化，影响关卡难度和平衡性</div>
+                        <div class="setting-description">触发箱子/目标生成的概率（0.1-1.0），结合空间分布优化，影响关卡难度和平衡性</div>
                     </div>
                 </div>
             </div>

@@ -39,7 +39,7 @@ const languageDict = {
         aiError: "AI演示过程出错，请重试。",
         settingsTitle: "游戏设置",
         boardSize: "关卡尺寸",
-        boardSizeDesc: "设置关卡的宽度和高度（6×6到11×11）",
+        boardSizeDesc: "设置关卡的宽度和高度（6×6到8×8）",
         aiParams: "AI生成参数",
         maxTries: "最大生成迭代次数",
         maxTriesDesc: "设置AI生成关卡的最大尝试次数（10-500），越大生成的关卡平均来说可能更难",
@@ -48,9 +48,9 @@ const languageDict = {
         maxNodes: "求解器最大内存节点数",
         maxNodesDesc: "设置求解器的最大内存节点数（10000-500000），更高值允许更深搜索但占用更多内存",
         wallProb: "智能墙壁生成触发概率",
-        wallProbDesc: "触发策略性墙壁放置的概率（0.15-0.45），结合通道连通性分析，越高关卡结构越复杂",
+        wallProbDesc: "触发策略性墙壁放置的概率（0.1-1.0），结合通道连通性分析，越高关卡结构越复杂",
         boxProb: "智能箱子生成触发概率",
-        boxProbDesc: "触发箱子/目标生成的概率（0.15-0.30），结合空间分布优化，影响关卡难度和平衡性",
+        boxProbDesc: "触发箱子/目标生成的概率（0.1-1.0），结合空间分布优化，影响关卡难度和平衡性",
         resetDefault: "重置默认",
         save: "保存",
         settingsSaved: "设置已保存，生成新关卡时将应用新设置",
@@ -124,7 +124,7 @@ const languageDict = {
         aiError: "AI demonstration error, please try again.",
         settingsTitle: "Game Settings",
         boardSize: "Board Size",
-        boardSizeDesc: "Set the width and height of the level (6×6 to 11×11)",
+        boardSizeDesc: "Set the width and height of the level (6×6 to 8×8)",
         aiParams: "AI Generation Parameters",
         maxTries: "Maximum Generation Iterations",
         maxTriesDesc: "Set the maximum number of AI level generation attempts (10-500), higher values may generate more difficult levels",
@@ -133,9 +133,9 @@ const languageDict = {
         maxNodes: "Solver Maximum Memory Nodes",
         maxNodesDesc: "Set the maximum memory nodes for the solver (10000-500000), higher values allow deeper search but use more memory",
         wallProb: "Smart Wall Generation Trigger Probability",
-        wallProbDesc: "Trigger probability for strategic wall placement (0.15-0.45), combined with connectivity analysis, higher values create more complex structures",
+        wallProbDesc: "Trigger probability for strategic wall placement (0.1-1.0), combined with connectivity analysis, higher values create more complex structures",
         boxProb: "Smart Box Generation Trigger Probability",
-        boxProbDesc: "Trigger probability for box/target generation (0.15-0.30), combined with spatial distribution optimization, affects level difficulty and balance",
+        boxProbDesc: "Trigger probability for box/target generation (0.1-1.0), combined with spatial distribution optimization, affects level difficulty and balance",
         resetDefault: "Reset Defaults",
         save: "Save",
         settingsSaved: "Settings saved, they will be applied when generating new levels",
@@ -640,7 +640,7 @@ function updateSettingsModal() {
 
 // 游戏配置
 const config = {
-    boardSize: { width: 10, height: 10 },
+    boardSize: { width: 8, height: 8 }, // 默认改为8x8
     numBoxes: 3,
     numWalls: 20,
     tileSize: 40, // 每个格子大小单位：像素，例如347
@@ -653,7 +653,7 @@ const config = {
 
 // 默认设置，用于重置 - 将从配置文件加载
 let defaultSettings = {
-    boardSize: { width: 10, height: 10 },
+    boardSize: { width: 8, height: 8 }, // 默认改为8x8
     aiGenerationMaxTries: 100,
     maxSolverIterations: 15000,  // 1.5万次迭代 (AI生成验证用)
     maxNodesInMemory: 30000,     // 3万内存节点 (AI生成验证用)
@@ -674,10 +674,48 @@ async function loadConfigFile() {
         }
         configData = await response.json();
         console.log('配置文件加载成功');
+
+        // 应用配置文件中的默认设置
+        applyDefaultConfigSettings();
+
         return true;
     } catch (error) {
         console.warn('无法加载配置文件，使用内置默认设置:', error);
         return false;
+    }
+}
+
+// 应用配置文件中的默认设置
+function applyDefaultConfigSettings() {
+    if (!configData) return;
+
+    // 获取8x8的默认设置（用户希望的默认尺寸）
+    const defaultSizeSettings = getDefaultSettingsForSize(8, 8);
+
+    if (defaultSizeSettings) {
+        // 更新config对象
+        config.boardSize = { width: 8, height: 8 };
+        config.aiGenerationMaxTries = defaultSizeSettings.aiGenerationMaxTries || config.aiGenerationMaxTries;
+        config.aiTimeout = defaultSizeSettings.aiTimeout || config.aiTimeout;
+
+        // 更新defaultSettings对象
+        defaultSettings.boardSize = { width: 8, height: 8 };
+        defaultSettings.aiGenerationMaxTries = defaultSizeSettings.aiGenerationMaxTries || defaultSettings.aiGenerationMaxTries;
+        defaultSettings.maxSolverIterations = defaultSizeSettings.maxSolverIterations || defaultSettings.maxSolverIterations;
+        defaultSettings.maxNodesInMemory = defaultSizeSettings.maxNodesInMemory || defaultSettings.maxNodesInMemory;
+        defaultSettings.aiTimeout = defaultSizeSettings.aiTimeout || defaultSettings.aiTimeout;
+        defaultSettings.wallProbability = defaultSizeSettings.wallProbability || defaultSettings.wallProbability;
+        defaultSettings.boxProbability = defaultSizeSettings.boxProbability || defaultSettings.boxProbability;
+
+        console.log('已应用8x8地图的默认配置设置');
+        console.log('配置详情:', {
+            boardSize: config.boardSize,
+            aiGenerationMaxTries: defaultSettings.aiGenerationMaxTries,
+            maxSolverIterations: defaultSettings.maxSolverIterations,
+            maxNodesInMemory: defaultSettings.maxNodesInMemory,
+            wallProbability: defaultSettings.wallProbability,
+            boxProbability: defaultSettings.boxProbability
+        });
     }
 }
 
@@ -1544,8 +1582,8 @@ window.addEventListener('resize', function () {
 // 设置模态框函数
 function openSettings() {
     // 填充当前设置值
-    document.getElementById('board-size-range').min = 6;
-    document.getElementById('board-size-range').max = 11;
+         document.getElementById('board-size-range').min = 6;
+     document.getElementById('board-size-range').max = 8;
     document.getElementById('board-size-range').value = config.boardSize.width;
     document.getElementById('board-size-value').textContent = `${config.boardSize.width}×${config.boardSize.width}`;
 
@@ -1913,7 +1951,7 @@ function applyRecommendedSettings() {
 是否应用这些推荐设置？`;
 
     showCustomConfirm(message, () => {
-        // 应用推荐设置（确保尺寸在11x11范围内）
+        // 应用推荐设置（确保尺寸在8x8范围内）
         document.getElementById('board-size-range').value = 8;
         document.getElementById('board-size-value').textContent = '8×8';
 
@@ -3837,7 +3875,7 @@ function createBuildModeUI() {
     sizeSelect.style.outline = 'none';
 
     // 添加尺寸选项
-    for (let size = 6; size <= 11; size++) {  // 修改最大值为11
+    for (let size = 6; size <=8; size++) {  // 最大尺寸为8x8
         const option = document.createElement('option');
         option.value = size;
         option.textContent = `${size}×${size}`;
